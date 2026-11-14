@@ -17,6 +17,11 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
   response.end(JSON.stringify(body));
 }
 
+function sendHtml(response: ServerResponse, status: number, html: string): void {
+  response.writeHead(status, {'content-type': 'text/html; charset=utf-8'});
+  response.end(html);
+}
+
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -31,6 +36,54 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+
+  if (request.method === 'GET' && url.pathname === '/') {
+    sendHtml(response, 200, `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TraceLayer Agent API</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #0d1511; color: #edf4ef; }
+    body { margin: 0; padding: 48px 20px; }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    p, li { color: #a7b5ac; line-height: 1.6; }
+    .status { display: inline-flex; gap: 9px; align-items: center; border: 1px solid #24543a; border-radius: 999px; padding: 7px 12px; color: #9de4b3; background: #10251a; font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #52d27b; }
+    section { margin-top: 28px; padding: 20px; border: 1px solid #26352c; border-radius: 14px; background: #121d16; }
+    a { color: #a8d8b4; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { color: #d9eadf; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 9px; background: #09100c; color: #d9eadf; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TraceLayer Agent API</h1>
+    <p>The isolated upgrade service is running. This is its API landing page; the judge/demo frontend remains on its own port.</p>
+    <span class="status"><span class="dot"></span>API available on localhost</span>
+    <section>
+      <h2>Endpoints</h2>
+      <ul>
+        <li><a href="/api/agent/health">Health</a></li>
+        <li><a href="/api/agent/capabilities">Registered screen capabilities</a></li>
+        <li><a href="/api/agent/workflows">Registered workflows</a></li>
+        <li><code>POST /api/agent/tasks</code> — plan and execute a model-selected task</li>
+        <li><code>POST /api/agent/runs</code> — execute the deterministic five-screen workflow</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Model setup</h2>
+      <p>Model-driven tasks need the fine-tuned Gemma adapter loaded by the local model service. Until that is running, <code>POST /api/agent/tasks</code> returns a service-unavailable response.</p>
+      <p>See <a href="https://github.com/Akullganesh19/Code_Hunters/tree/main/upgrades/gemma-agent">the Gemma setup guide</a>.</p>
+    </section>
+  </main>
+</body>
+</html>`);
+    return;
+  }
 
   if (request.method === 'GET' && url.pathname === '/api/agent/health') {
     sendJson(response, 200, {status: 'ok', service: 'tracelayer-agent-upgrade'});
