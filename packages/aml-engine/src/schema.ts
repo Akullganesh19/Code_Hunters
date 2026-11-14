@@ -85,12 +85,15 @@ const FIELD_LENGTH_LIMITS: Record<(typeof REQUIRED_COLUMNS)[number], number> = {
   timestamp: 64,
 };
 
-export function validateTransactions(rows: RawTransactionInput[]): TransactionEdge[] {
+export function validateTransactions(
+  rows: RawTransactionInput[],
+  maxRows = MAX_TRANSACTIONS_PER_REQUEST
+): TransactionEdge[] {
   if (!Array.isArray(rows)) {
     throw new ValidationError('Input transactions must be an array.');
   }
-  if (rows.length > MAX_TRANSACTIONS_PER_REQUEST) {
-    throw new ValidationError(`At most ${MAX_TRANSACTIONS_PER_REQUEST.toLocaleString('en-US')} transactions are allowed per request.`);
+  if (rows.length > maxRows) {
+    throw new ValidationError(`At most ${maxRows.toLocaleString('en-US')} transactions are allowed per request.`);
   }
   if (rows.length === 0) {
     return [];
@@ -165,8 +168,11 @@ export function validateTransactions(rows: RawTransactionInput[]): TransactionEd
   return validated;
 }
 
-export function buildTransactionGraph(rows: RawTransactionInput[]): TransactionGraph {
-  const edges = validateTransactions(rows);
+export function buildTransactionGraph(
+  rows: RawTransactionInput[],
+  maxRows = MAX_TRANSACTIONS_PER_REQUEST
+): TransactionGraph {
+  const edges = validateTransactions(rows, maxRows);
   const nodes = new Set<string>();
   const outEdges = new Map<string, TransactionEdge[]>();
   const inEdges = new Map<string, TransactionEdge[]>();

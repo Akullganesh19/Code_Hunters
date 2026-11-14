@@ -14,6 +14,7 @@ import {
   ENTERPRISE_SCREENS,
   extractMotifSubgraph,
   injectAdversarialMotif,
+  MAX_ADVERSARIAL_SANDBOX_ROWS,
   runDetectionPipeline,
   shouldMergeAlerts,
 } from '../src/pipeline';
@@ -238,6 +239,31 @@ test('Adversarial motif injection catches sub-threshold structuring where baseli
     badCyc.injectedTxIds.some((id) => badFlagged.has(id)),
     false
   );
+});
+
+test('Adversarial sandbox accepts bounded synthetic rows above the 50k request cap', () => {
+  const rows = Array.from({length: MAX_TRANSACTIONS_PER_REQUEST}, (_, index) => ({
+    tx_id: `BASE_${index}`,
+    sender: `SOURCE_${index}`,
+    receiver: `TARGET_${index}`,
+    amount: 100,
+    timestamp: '2026-03-10T08:00:00.000Z',
+  }));
+  const baseEdges = validateTransactions(rows);
+  const {sandboxEdges, injectedTxIds} = injectAdversarialMotif(baseEdges, {
+    typology: 'Rapid Pass-through',
+    hopCount: 4,
+    retentionRatio: 0.94,
+    hopDelayMinutes: 20,
+    amountPerTx: 8_500,
+    wrongTimeOrder: false,
+  });
+
+  assert.equal(sandboxEdges.length, MAX_TRANSACTIONS_PER_REQUEST + 4);
+  assert.ok(sandboxEdges.length <= MAX_ADVERSARIAL_SANDBOX_ROWS);
+  const result = runDetectionPipeline(sandboxEdges, {}, MAX_ADVERSARIAL_SANDBOX_ROWS);
+  const detectedIds = new Set(result.alerts.flatMap((alert) => alert.tx_ids));
+  assert.ok(injectedTxIds.every((id) => detectedIds.has(id)));
 });
 
 test('SAR Case Dossier SHA-256 digest is deterministic and Markdown export contains ledger', () => {

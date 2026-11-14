@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlaskConical, RotateCcw } from 'lucide-react';
 import {
   injectAdversarialMotif,
+  MAX_ADVERSARIAL_SANDBOX_ROWS,
   runDetectionPipeline,
   type AdversarialMotifConfig,
 } from '@tracelayer/aml-engine';
@@ -82,7 +83,7 @@ export function AdversarialLabScreen({ baseEdges }: AdversarialLabScreenProps) {
       baseEdges,
       injectedConfig
     );
-    const result = runDetectionPipeline(sandboxEdges);
+    const result = runDetectionPipeline(sandboxEdges, {}, MAX_ADVERSARIAL_SANDBOX_ROWS);
 
     const injectedSet = new Set(injectedTxIds);
     const matchingAlerts = result.alerts.filter((a) =>

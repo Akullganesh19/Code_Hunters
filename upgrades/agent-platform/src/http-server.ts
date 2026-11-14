@@ -5,6 +5,7 @@ import {redactRun, SqliteAgentRunStore} from './sqlite-run-store';
 import {AgentWorkflowRunner} from './workflow-runner';
 import {fiveScreenReviewWorkflow} from './workflows/five-screen-review';
 import {runAgentChat} from './agent-chat';
+import {APICallError} from 'ai';
 import {z} from 'zod';
 import {MAX_TRANSACTIONS_PER_REQUEST, validateTransactions} from '@tracelayer/aml-engine';
 import {
@@ -138,13 +139,22 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, result);
     } catch (error) {
       console.error(`[agent-chat] ${error instanceof Error ? error.name : 'Error'}`);
-      const status = error instanceof RequestBodyTooLargeError ? 413 : error instanceof SyntaxError ? 400 : 502;
+      const rateLimited = APICallError.isInstance(error) && error.statusCode === 429;
+      if (rateLimited) response.setHeader('retry-after', error.responseHeaders?.['retry-after'] ?? '2');
+      const status = error instanceof RequestBodyTooLargeError ? 413
+        : error instanceof SyntaxError ? 400
+          : error instanceof Error && error.name === 'ValidationError' ? 422
+            : rateLimited ? 429 : 502;
       sendJson(response, status, {
         error: status === 413
           ? 'Request body exceeds the 25 MB limit.'
           : status === 400
             ? 'Invalid JSON request body.'
-          : 'The agent model could not respond. Check that Ollama is running with the configured model, or configure a reachable OpenAI-compatible Hugging Face endpoint.',
+            : status === 422
+              ? 'The transaction data failed validation.'
+              : status === 429
+                ? 'The configured agent provider is rate-limiting requests. Retry shortly.'
+                : 'The configured agent model provider could not complete the request. Check the provider endpoint, model, credentials, and availability.',
       });
     } finally {
       activeAgentRequests--;

@@ -11,6 +11,8 @@ import {
 } from './riskModel';
 import {
   buildTransactionGraph,
+  MAX_TRANSACTIONS_PER_REQUEST,
+  ValidationError,
   validateTransactions,
   type Alert,
   type RawTransactionInput,
@@ -20,6 +22,8 @@ import {
 import { computePriorityScore } from './scoring';
 
 export const CLOSING_DISCLAIMER = 'Flagged for review. Not proof of wrongdoing.';
+// Adversarial simulations can add at most ten synthetic rows to a validated request.
+export const MAX_ADVERSARIAL_SANDBOX_ROWS = MAX_TRANSACTIONS_PER_REQUEST + 10;
 
 export const ENTERPRISE_SCREENS = [
   'Overview',
@@ -249,11 +253,12 @@ export interface DetectionPipelineResult {
 
 export function runDetectionPipeline(
   rows: RawTransactionInput[],
-  options: DetectionPipelineOptions = {}
+  options: DetectionPipelineOptions = {},
+  maxRows = MAX_TRANSACTIONS_PER_REQUEST
 ): DetectionPipelineResult {
   const startTime = performance.now();
-  const edges = validateTransactions(rows);
-  const graph = buildTransactionGraph(edges);
+  const edges = validateTransactions(rows, maxRows);
+  const graph = buildTransactionGraph(edges, maxRows);
 
   if (edges.length === 0) {
     const runtimeMs = Math.max(0.1, Math.round((performance.now() - startTime) * 100) / 100);
@@ -345,6 +350,9 @@ export function injectAdversarialMotif(
   injectedTxIds: string[];
   injectedAccounts: string[];
 } {
+  if (baseEdges.length > MAX_TRANSACTIONS_PER_REQUEST) {
+    throw new ValidationError(`At most ${MAX_TRANSACTIONS_PER_REQUEST.toLocaleString('en-US')} base transactions are allowed per request.`);
+  }
   const maxTs =
     baseEdges.length > 0
       ? Math.max(...baseEdges.map((e) => e.tsMs))
@@ -430,7 +438,7 @@ export function injectAdversarialMotif(
     }
   }
 
-  const sandboxEdges = validateTransactions([...baseEdges, ...injectedRows]);
+  const sandboxEdges = validateTransactions([...baseEdges, ...injectedRows], MAX_ADVERSARIAL_SANDBOX_ROWS);
   return {
     sandboxEdges,
     injectedTxIds,

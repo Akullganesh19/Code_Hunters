@@ -5,6 +5,7 @@ import {
   formatDossierMarkdown,
   generateIbmAmlBenchmark,
   injectAdversarialMotif,
+  MAX_ADVERSARIAL_SANDBOX_ROWS,
   runDetectionPipeline,
   searchDataset,
   validateTransactions,
@@ -179,7 +180,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
       if (!config) throw new Error('Capability input must include a scenario config.');
       const baselineThreshold = Number(payload.baselineThreshold ?? 10_000);
       const injected = injectAdversarialMotif(baseEdges, config);
-      const analysis = runDetectionPipeline(injected.sandboxEdges);
+      const analysis = runDetectionPipeline(injected.sandboxEdges, {}, MAX_ADVERSARIAL_SANDBOX_ROWS);
       const injectedIds = new Set(injected.injectedTxIds);
       const matchingAlerts = analysis.alerts.filter((alert) =>
         alert.tx_ids.some((txId) => injectedIds.has(txId))
