@@ -19,6 +19,41 @@ test('registers an action for each of the five current screens', () => {
   ]);
 });
 
+test('validates active datasets and returns coverage without transaction rows', async () => {
+  const registry = createAmlCapabilityRegistry();
+  const context = {runId: 'test-run', workflowId: 'test', startedBy: 'test-analyst'};
+  const transactions = getDemoTransactions();
+  const valid = await registry.execute('overview.validate_dataset', {
+    transactions,
+    sourceLabel: 'demo dataset',
+    hasGroundTruthLabels: true,
+  }, context) as Record<string, unknown>;
+
+  assert.equal(valid.valid, true);
+  assert.equal(valid.transactionCount, transactions.length);
+  assert.ok(Number(valid.uniqueAccountCount) > 0);
+  assert.ok(Number(valid.totalVolume) > 0);
+  assert.deepEqual(valid.labelCoverage, {
+    labeledRows: transactions.length,
+    unlabeledRows: 0,
+    positiveRows: transactions.filter((row) => row.is_laundering === 1).length,
+    eligibleForEvaluation: true,
+  });
+  assert.equal('transactions' in valid, false);
+  assert.equal('edges' in valid, false);
+
+  const invalid = await registry.execute('overview.validate_dataset', {
+    transactions: [
+      {tx_id: 'private-tx-id', sender: 'private-account', receiver: 'other', amount: 10, timestamp: '2025-01-01'},
+      {tx_id: 'private-tx-id', sender: 'private-account', receiver: 'other', amount: 20, timestamp: '2025-01-02'},
+    ],
+  }, context) as Record<string, unknown>;
+  assert.equal(invalid.valid, false);
+  assert.match(String(invalid.issue), /Duplicate transaction IDs/);
+  assert.equal(JSON.stringify(invalid).includes('private-tx-id'), false);
+  assert.equal(JSON.stringify(invalid).includes('private-account'), false);
+});
+
 test('runs the five-screen workflow and pauses its dossier draft for review', async () => {
   const registry = createAmlCapabilityRegistry();
   const store = new InMemoryAgentRunStore();

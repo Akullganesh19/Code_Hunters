@@ -4,7 +4,7 @@ The local TraceLayer agent is a model-backed analyst copilot with typed tools fo
 
 ## Hugging Face model guidance
 
-The Hugging Face skills and CLI guidance are installed under the repository's `.agents/skills/` folder. Use the model browser and model cards to compare instruction models by tool-calling support, license, task, context, quantization, runtime requirements, and available inference providers. Do not download the whole Hub; it contains far more models than this machine can run.
+To compare Hugging Face models, use their model cards and supported inference providers. Check tool-calling support, license, context size, quantization, runtime requirements, privacy, and cost. Do not download the whole Hub; it contains far more models than this machine can run. Model-discovery tooling is developer-local and is not a TraceLayer runtime dependency.
 
 Choose a model based on tool-calling reliability, license, context size, runtime, privacy, and cost. The app does not download or fine-tune model weights. It calls a model through the OpenAI-compatible provider configured below.
 
@@ -24,7 +24,7 @@ AGENT_MODEL_API_KEY=your-groq-key
 
 | Screen | Agent actions |
 | --- | --- |
-| Overview | Analyze with active detector thresholds; search alerts, accounts, and transactions |
+| Overview | Validate dataset schema and coverage; analyze with active detector thresholds; search alerts, accounts, and transactions |
 | Workspace | Navigate to any screen; open a verified alert directly in Investigation |
 | Investigation | Inspect alert graph evidence; look up transactions; summarize account activity; propose Confirmed/Dismissed dispositions |
 | Adversarial Lab | Run bounded synthetic scenarios against a sandbox copy of the current dataset |

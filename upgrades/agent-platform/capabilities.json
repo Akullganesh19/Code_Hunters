@@ -2,6 +2,12 @@
   "version": 1,
   "capabilities": [
     {
+      "id": "overview.validate_dataset",
+      "screen": "overview",
+      "permission": "read",
+      "description": "Validate required transaction fields and return privacy-conscious dataset coverage diagnostics without exposing rows."
+    },
+    {
       "id": "overview.compare_detector_settings",
       "screen": "overview",
       "permission": "read",

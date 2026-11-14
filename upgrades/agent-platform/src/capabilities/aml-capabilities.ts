@@ -9,6 +9,7 @@ import {
   runDetectionPipeline,
   searchDataset,
   validateTransactions,
+  ValidationError,
   type AdversarialMotifConfig,
   type Alert,
   type DetectionPipelineOptions,
@@ -169,6 +170,73 @@ export function compareDetectorSettings(
 
 export function createAmlCapabilityRegistry(): CapabilityRegistry {
   const registry = new CapabilityRegistry();
+
+  registry.register({
+    descriptor: {
+      id: 'overview.validate_dataset',
+      screen: 'overview',
+      permission: 'read',
+      description: 'Validate the active dataset and return privacy-conscious schema and coverage diagnostics without exposing transaction rows.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const rows = transactionsFrom(payload);
+      try {
+        const edges = validateTransactions(rows);
+        const accounts = new Set<string>();
+        let totalVolume = 0;
+        const hasGroundTruthLabels = payload.hasGroundTruthLabels === true;
+        let positiveRows = 0;
+        for (const edge of edges) {
+          accounts.add(edge.sender);
+          accounts.add(edge.receiver);
+          totalVolume += edge.amount;
+          if (hasGroundTruthLabels) {
+            if (edge.is_laundering === 1) positiveRows += 1;
+          }
+        }
+        const labeledRows = hasGroundTruthLabels ? edges.length : 0;
+        return {
+          valid: true,
+          transactionCount: edges.length,
+          uniqueAccountCount: accounts.size,
+          totalVolume: Math.round(totalVolume * 100) / 100,
+          timeWindow: edges.length ? {start: edges[0].timestamp, end: edges.at(-1)!.timestamp} : null,
+          labelCoverage: {
+            labeledRows,
+            unlabeledRows: edges.length - labeledRows,
+            positiveRows,
+            eligibleForEvaluation: edges.length > 0 && labeledRows === edges.length,
+          },
+          note: 'Validation covers required fields, unique transaction IDs, positive finite amounts, parseable timestamps, and supported request size. It does not verify source authenticity or label correctness.',
+        };
+      } catch (error) {
+        if (!(error instanceof ValidationError)) throw error;
+        const message = error.message;
+        const rowMatch = message.match(/row (\d+)/i);
+        const fieldMatch = message.match(/field "([a-z_]+)"/i);
+        const issue = message.includes('Duplicate tx_id')
+          ? 'Duplicate transaction IDs were found.'
+          : message.includes('amount')
+            ? 'A transaction amount is missing or invalid.'
+            : message.includes('timestamp')
+              ? 'A transaction timestamp is missing or invalid.'
+              : message.includes('sender') || message.includes('receiver') || message.includes('tx_id')
+                ? 'A required transaction field is missing or invalid.'
+                : message.includes('allowed per request')
+                  ? 'The dataset exceeds the supported transaction limit.'
+                  : 'The dataset contains an invalid transaction row.';
+        return {
+          valid: false,
+          transactionCount: rows.length,
+          issue,
+          ...(rowMatch ? {rowIndex: Number(rowMatch[1])} : {}),
+          ...(fieldMatch ? {field: fieldMatch[1]} : {}),
+          note: 'Raw transaction values are omitted from validation diagnostics.',
+        };
+      }
+    },
+  });
 
   registry.register({
     descriptor: {

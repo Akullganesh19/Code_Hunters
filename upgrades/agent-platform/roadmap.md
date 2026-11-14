@@ -15,7 +15,7 @@ Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MOD
 ## Phase 1 — capability coverage
 
 - Cover each current screen's important user tasks with bounded, typed agent tools.
-- Add the remaining data import/validation capability. Dossier consistency checks before export, detector what-ifs, and two-seed synthetic benchmark comparisons are implemented.
+- Add controlled data-import recommendations and validation for rejected rows. Active-dataset schema and coverage validation, dossier consistency checks before export, detector what-ifs, and two-seed synthetic benchmark comparisons are implemented.
 - Keep evidence IDs and current screen settings attached to tool outputs.
 
 **Done when:** each supported task maps to a documented capability, and unsupported tasks return a clear limitation.
