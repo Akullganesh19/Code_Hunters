@@ -1,8 +1,12 @@
 # Agent platform roadmap
 
+## Prototype status
+
+The isolated prototype now has a capability registry, in-memory run/event store, workflow runner, five-screen workflow, and localhost HTTP API. It can execute the registered deterministic workflow and pause for review. It has no model planner, durable storage, schedule/event trigger, authentication, or connection to the judge/demo UI yet.
+
 ## Phase 1 — foundations
 
-- Add persistent agent-run records and an event log.
+- Replace the in-memory run/event store with persistent records.
 - Add a backend job queue with cancellation, retry limits, and idempotency.
 - Define versioned capability input/output contracts and permission checks.
 - Show run status and evidence consistently in the frontend.

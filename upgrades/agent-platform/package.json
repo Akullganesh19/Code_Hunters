@@ -1,0 +1,12 @@
+{
+  "name": "tracelayer-agent-platform-upgrade",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx src/http-server.ts",
+    "start": "node --import tsx src/http-server.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  }
+}
