@@ -64,6 +64,79 @@ function alertSignature(alert: Alert): string {
   ]);
 }
 
+function benchmarkSettingsFrom(input: Record<string, unknown>) {
+  const rows = input.rows ?? 4_000;
+  const seedA = input.seedA ?? 42;
+  const seedB = input.seedB ?? 43;
+  const splitRatio = input.splitRatio ?? 0.7;
+  if (typeof rows !== 'number' || !Number.isInteger(rows) || rows < 100 || rows > 25_000) {
+    throw new Error('Benchmark rows must be an integer from 100 to 25,000.');
+  }
+  for (const [name, value] of [['seedA', seedA], ['seedB', seedB]] as const) {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 99_999) {
+      throw new Error(`${name} must be an integer from 1 to 99,999.`);
+    }
+  }
+  if (seedA === seedB) throw new Error('Benchmark comparison requires two different seeds.');
+  if (typeof splitRatio !== 'number' || !Number.isFinite(splitRatio) || splitRatio < 0.6 || splitRatio > 0.8) {
+    throw new Error('Benchmark split ratio must be between 0.6 and 0.8.');
+  }
+  return {
+    rows: rows as number,
+    seedA: seedA as number,
+    seedB: seedB as number,
+    splitRatio: splitRatio as number,
+  };
+}
+
+function benchmarkSummary(report: ReturnType<typeof evaluateTemporalSplit>) {
+  const tier = (name: 'baselineConfusion' | 'graphConfusion' | 'hybridConfusion') => ({
+    precision: report[name].precision,
+    recall: report[name].recall,
+    f1: report[name].f1,
+  });
+  const cluster = (tier: string) => report.ablationTable.find((row) => row.tier.startsWith(tier))?.clusterF1 ?? 0;
+  return {
+    seed: report.seed,
+    trainRows: report.trainRows,
+    testRows: report.testRows,
+    singleTransaction: tier('baselineConfusion'),
+    graph: tier('graphConfusion'),
+    hybrid: tier('hybridConfusion'),
+    graphClusterF1: cluster('Tier 2:'),
+    hybridClusterF1: cluster('Tier 3:'),
+    amountPsi: report.telemetry.amountPsi,
+    driftStatus: report.telemetry.driftStatus,
+  };
+}
+
+export function compareSyntheticBenchmarks(input: Record<string, unknown>) {
+  const {rows, seedA, seedB, splitRatio} = benchmarkSettingsFrom(input);
+  const evaluate = (seed: number) => evaluateTemporalSplit(generateIbmAmlBenchmark(rows, seed), {
+    splitRatio,
+    seed,
+    rowCapApplied: rows,
+  });
+  const first = benchmarkSummary(evaluate(seedA));
+  const second = benchmarkSummary(evaluate(seedB));
+  const delta = (a: number, b: number) => Math.round((b - a) * 10_000) / 10_000;
+  return {
+    synthetic: true,
+    rows,
+    splitRatio,
+    runs: [first, second],
+    candidateMinusBaseline: {
+      singleTransactionF1: delta(first.singleTransaction.f1, second.singleTransaction.f1),
+      graphF1: delta(first.graph.f1, second.graph.f1),
+      hybridF1: delta(first.hybrid.f1, second.hybrid.f1),
+      graphClusterF1: delta(first.graphClusterF1, second.graphClusterF1),
+      hybridClusterF1: delta(first.hybridClusterF1, second.hybridClusterF1),
+      amountPsi: delta(first.amountPsi, second.amountPsi),
+    },
+    interpretation: 'Different deterministic seeds create different synthetic samples. Metric deltas are a seed-sensitivity check, not evidence of real-world or production performance.',
+  };
+}
+
 export function compareDetectorSettings(
   edges: TransactionEdge[],
   baselineAlerts: Alert[],
@@ -318,6 +391,18 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
         seed,
         rowCapApplied: rows,
       });
+    },
+  });
+
+  registry.register({
+    descriptor: {
+      id: 'evaluation.compare_benchmarks',
+      screen: 'evaluation',
+      permission: 'read',
+      description: 'Compare held-out metrics across two bounded, deterministic synthetic benchmark seeds and report seed sensitivity.',
+    },
+    execute(input) {
+      return compareSyntheticBenchmarks(objectInput(input));
     },
   });
 

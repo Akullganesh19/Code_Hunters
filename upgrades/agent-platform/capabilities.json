@@ -32,6 +32,12 @@
       "description": "Prepare a case draft from selected alerts and produce an evidence ledger for analyst review."
     },
     {
+      "id": "evaluation.compare_benchmarks",
+      "screen": "evaluation",
+      "permission": "read",
+      "description": "Compare held-out metrics across two bounded deterministic synthetic benchmark seeds and report seed sensitivity."
+    },
+    {
       "id": "evaluation.run_benchmark",
       "screen": "evaluation",
       "permission": "read",

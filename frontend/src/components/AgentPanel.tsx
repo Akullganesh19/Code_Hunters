@@ -174,7 +174,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
           </div>}
 
           {messages.length === 0 && <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm leading-6 text-[#aab7ae]">
-            Ask about this dataset, an alert, account, or transaction. You can compare detector settings, request a sandbox scenario or benchmark, or draft an evidence-linked dossier.
+            Ask about this dataset, an alert, account, or transaction. You can compare detector settings or benchmark seeds, request a sandbox scenario, or draft an evidence-linked dossier.
           </div>}
 
           {messages.map((message, index) => <div key={`${index}-${message.role}`} className={`rounded-xl p-3 text-sm leading-6 ${message.role === 'user' ? 'ml-8 bg-violet-500/15 text-violet-50' : 'mr-3 border border-white/10 bg-white/[0.035] text-[#e3e9e5]'}`}>

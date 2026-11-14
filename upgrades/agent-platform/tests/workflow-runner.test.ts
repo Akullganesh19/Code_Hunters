@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {getDemoTransactions, runDetectionPipeline} from '@tracelayer/aml-engine';
 import {CapabilityRegistry} from '../src/capability-registry';
-import {compareDetectorSettings, createAmlCapabilityRegistry} from '../src/capabilities/aml-capabilities';
+import {compareDetectorSettings, compareSyntheticBenchmarks, createAmlCapabilityRegistry} from '../src/capabilities/aml-capabilities';
 import {InMemoryAgentRunStore} from '../src/run-store';
 import {AgentWorkflowRunner} from '../src/workflow-runner';
 import {fiveScreenReviewWorkflow} from '../src/workflows/five-screen-review';
@@ -67,6 +67,22 @@ test('compares detector settings against active findings without mutating the ba
   assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {K: 1}), /outside its supported range/);
   assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {riskModel: {}}), /Unsupported comparison setting/);
   assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {}), /at least one/);
+});
+
+test('compares two synthetic benchmark seeds and labels the result as seed sensitivity only', () => {
+  const comparison = compareSyntheticBenchmarks({rows: 1_000, seedA: 42, seedB: 43, splitRatio: 0.7});
+
+  assert.equal(comparison.synthetic, true);
+  assert.equal(comparison.rows, 1_000);
+  assert.deepEqual(comparison.runs.map((run) => run.seed), [42, 43]);
+  assert.ok(comparison.runs.every((run) => run.trainRows + run.testRows === 1_000));
+  assert.equal(
+    comparison.candidateMinusBaseline.hybridF1,
+    Math.round((comparison.runs[1].hybrid.f1 - comparison.runs[0].hybrid.f1) * 10_000) / 10_000,
+  );
+  assert.match(comparison.interpretation, /not evidence of real-world or production performance/);
+  assert.throws(() => compareSyntheticBenchmarks({rows: 1_000, seedA: 42, seedB: 42}), /different/);
+  assert.throws(() => compareSyntheticBenchmarks({rows: 25_001, seedA: 42, seedB: 43}), /100 to 25,000/);
 });
 
 test('does not execute write capabilities automatically', async () => {
