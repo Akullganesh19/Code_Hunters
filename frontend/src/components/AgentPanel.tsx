@@ -4,6 +4,8 @@ import type {DetectionPipelineOptions, ScreenId, TransactionEdge} from '@tracela
 import {
   sendAgentMessage,
   listRecentAgentRuns,
+  cancelAgentRun,
+  getAgentRun,
   startFiveScreenReview,
   type AgentChatMessage,
   type AgentRun,
@@ -88,13 +90,28 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
     setBusy(true);
     setError(null);
     try {
-      const completedRun = await startFiveScreenReview(edges, sourceLabel);
-      setRun(completedRun);
-      setRecentRuns((current) => [completedRun, ...current.filter((item) => item.id !== completedRun.id)].slice(0, 8));
+      let currentRun = await startFiveScreenReview(edges, sourceLabel);
+      setRun(currentRun);
+      setRecentRuns((current) => [currentRun, ...current.filter((item) => item.id !== currentRun.id)].slice(0, 8));
+      while (currentRun.status === 'queued' || currentRun.status === 'running') {
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+        currentRun = await getAgentRun(currentRun.id);
+        setRun(currentRun);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The agent could not start this review.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function cancelRun() {
+    if (!run || (run.status !== 'queued' && run.status !== 'running')) return;
+    setError(null);
+    try {
+      setRun(await cancelAgentRun(run.id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The agent run could not be cancelled.');
     }
   }
 
@@ -217,8 +234,9 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
           {run && <div className="rounded-xl border border-white/10 p-3">
             <div className="mb-3 flex items-center justify-between text-xs">
               <span className="text-[#93a199]">Five-screen run</span>
-              <span className={`rounded-full px-2.5 py-1 ${run.status === 'failed' ? 'bg-rose-400/10 text-rose-200' : 'bg-emerald-400/10 text-emerald-200'}`}>{run.status.replace('_', ' ')}</span>
+              <span className={`rounded-full px-2.5 py-1 ${run.status === 'failed' ? 'bg-rose-400/10 text-rose-200' : run.status === 'cancelled' ? 'bg-amber-300/10 text-amber-100' : 'bg-emerald-400/10 text-emerald-200'}`}>{run.status.replace('_', ' ')}</span>
             </div>
+            {(run.status === 'queued' || run.status === 'running') && <button type="button" onClick={() => void cancelRun()} className="mb-3 rounded-md border border-rose-300/25 bg-rose-400/5 px-2.5 py-1.5 text-[11px] text-rose-100 hover:bg-rose-400/10">Cancel workflow</button>}
             <ol className="space-y-2">
               {steps.map(([id, label]) => {
                 const done = run.completedSteps.includes(id);

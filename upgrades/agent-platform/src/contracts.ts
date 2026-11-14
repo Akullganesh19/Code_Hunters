@@ -6,7 +6,7 @@ export type AgentScreen =
   | 'evaluation';
 
 export type CapabilityPermission = 'read' | 'draft' | 'write';
-export type AgentRunStatus = 'queued' | 'running' | 'needs_review' | 'completed' | 'failed';
+export type AgentRunStatus = 'queued' | 'running' | 'needs_review' | 'completed' | 'failed' | 'cancelled';
 
 export interface CapabilityDescriptor {
   id: string;
@@ -19,6 +19,7 @@ export interface CapabilityContext {
   runId: string;
   workflowId: string;
   startedBy: string;
+  signal?: AbortSignal;
 }
 
 export interface Capability<I = unknown, O = unknown> {
@@ -66,6 +67,7 @@ export interface AgentRunEvent {
     | 'step_completed'
     | 'approval_required'
     | 'run_completed'
+    | 'run_cancelled'
     | 'run_failed';
   timestamp: string;
   stepId?: string;

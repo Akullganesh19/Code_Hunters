@@ -4,7 +4,7 @@ import type {DetectionPipelineOptions} from '@tracelayer/aml-engine';
 export interface AgentRun {
   id: string;
   workflowId: string;
-  status: 'queued' | 'running' | 'needs_review' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'needs_review' | 'completed' | 'failed' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   completedSteps: string[];
@@ -90,5 +90,24 @@ export async function startFiveScreenReview(
     throw new Error(payload.error ?? 'The agent could not start this review.');
   }
   if (!payload.run) throw new Error('The agent service returned an empty run.');
+  return payload.run;
+}
+
+export async function getAgentRun(runId: string): Promise<AgentRun> {
+  const response = await fetch(`${agentBaseUrl}/api/agent/runs/${encodeURIComponent(runId)}`, {
+    credentials: 'same-origin',
+  });
+  const payload = (await response.json()) as {run?: AgentRun; error?: string};
+  if (!response.ok || !payload.run) throw new Error(payload.error ?? 'Could not load the agent run status.');
+  return payload.run;
+}
+
+export async function cancelAgentRun(runId: string): Promise<AgentRun> {
+  const response = await fetch(`${agentBaseUrl}/api/agent/runs/${encodeURIComponent(runId)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  });
+  const payload = (await response.json()) as {run?: AgentRun; error?: string};
+  if (!response.ok || !payload.run) throw new Error(payload.error ?? 'Could not cancel the agent run.');
   return payload.run;
 }

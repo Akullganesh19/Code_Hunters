@@ -82,6 +82,51 @@ test('runs the five-screen workflow and pauses its dossier draft for review', as
   assert.equal(events.at(-1)?.type, 'approval_required');
 });
 
+test('cancels queued and active workflows without starting later steps', async () => {
+  const registry = new CapabilityRegistry();
+  let firstStepCalls = 0;
+  let laterStepCalls = 0;
+  let signalFirstStepStarted!: () => void;
+  const firstStepStarted = new Promise<void>((resolve) => { signalFirstStepStarted = resolve; });
+  registry.register({
+    descriptor: {id: 'test.wait', screen: 'overview', permission: 'read', description: 'Wait for cancellation.'},
+    execute: (_input, context) => {
+      firstStepCalls += 1;
+      signalFirstStepStarted();
+      return new Promise<never>((_resolve, reject) => {
+        context.signal?.addEventListener('abort', () => reject(new Error('Aborted by run cancellation.')), {once: true});
+      });
+    },
+  });
+  registry.register({
+    descriptor: {id: 'test.after', screen: 'overview', permission: 'read', description: 'Must not run after cancellation.'},
+    execute: () => { laterStepCalls += 1; return {ok: true}; },
+  });
+  const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
+  runner.registerWorkflow({
+    id: 'cancellable', name: 'Cancellable', description: 'A cancellation test.',
+    steps: [
+      {id: 'wait', capabilityId: 'test.wait', resolveInput: () => ({})},
+      {id: 'after', capabilityId: 'test.after', resolveInput: () => ({})},
+    ],
+  });
+
+  const queued = await runner.enqueue('cancellable', {}, 'test-analyst');
+  const cancelledBeforeStart = await runner.cancel(queued.id);
+  assert.equal(cancelledBeforeStart?.status, 'cancelled');
+  assert.equal(firstStepCalls, 0);
+
+  const active = await runner.enqueue('cancellable', {}, 'test-analyst');
+  await firstStepStarted;
+  const cancelledWhileRunning = await runner.cancel(active.id);
+  assert.equal(cancelledWhileRunning?.status, 'cancelled');
+  assert.equal(laterStepCalls, 0);
+  assert.deepEqual(cancelledWhileRunning?.completedSteps, []);
+  const events = await runner.getRunEvents(active.id);
+  assert.equal(events.filter((event) => event.type === 'run_cancelled').length, 1);
+  assert.equal(events.some((event) => event.type === 'run_failed'), false);
+});
+
 test('compares detector settings against active findings without mutating the baseline', () => {
   const baseline = runDetectionPipeline(getDemoTransactions());
   const originalAlertIds = baseline.alerts.map((alert) => alert.alert_id);

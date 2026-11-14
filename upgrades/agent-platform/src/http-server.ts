@@ -83,7 +83,7 @@ const server = createServer(async (request, response) => {
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204, {
-      'access-control-allow-methods': 'GET,POST,OPTIONS',
+      'access-control-allow-methods': 'DELETE,GET,POST,OPTIONS',
       'access-control-allow-headers': 'content-type',
     });
     response.end();
@@ -188,13 +188,12 @@ const server = createServer(async (request, response) => {
 
       const payload = parsed.data;
       validateTransactions(payload.input.transactions);
-      const run = await runner.start(
+      const run = await runner.enqueue(
         payload.workflowId,
         payload.input,
         'unattributed-local-session'
       );
-      const status = run.status === 'failed' ? 422 : run.status === 'needs_review' ? 202 : 201;
-      sendJson(response, status, {run: redactRun(run), events: await runner.getRunEvents(run.id)});
+      sendJson(response, 202, {run: redactRun(run), events: await runner.getRunEvents(run.id)});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not start workflow.';
       const status = error instanceof RequestBodyTooLargeError ? 413 : error instanceof SyntaxError ? 400 : 422;
@@ -206,6 +205,13 @@ const server = createServer(async (request, response) => {
   }
 
   const runMatch = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)(?:\/(events))?$/);
+  if (request.method === 'DELETE' && runMatch && !runMatch[2]) {
+    const runId = decodeURIComponent(runMatch[1]);
+    const run = await runner.cancel(runId);
+    sendJson(response, run ? 200 : 404, run ? {run: redactRun(run)} : {error: 'Run not found.'});
+    return;
+  }
+
   if (request.method === 'GET' && runMatch) {
     const runId = decodeURIComponent(runMatch[1]);
     if (runMatch[2] === 'events') {
