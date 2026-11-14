@@ -76,3 +76,19 @@ export interface AgentRunEvent {
   detail?: string;
   durationMs?: number;
 }
+
+export interface AgentAuditEvent {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  type: 'chat_started' | 'tool_call_started' | 'tool_call_completed' | 'chat_completed' | 'chat_failed' | 'chat_cancelled' | 'analyst_action_proposed';
+  actor: 'unattributed-local-session';
+  screen: string;
+  toolName?: string;
+  capabilityId?: string;
+  permission?: CapabilityPermission;
+  callId?: string;
+  outcome?: 'success' | 'error';
+  actionType?: 'navigate_screen' | 'set_alert_decision';
+  durationMs?: number;
+}

@@ -9,6 +9,7 @@ import {
   type TransactionEdge,
 } from '@tracelayer/aml-engine';
 import {z} from 'zod';
+import type {AgentAuditEvent} from './contracts';
 import {createAmlCapabilityRegistry} from './capabilities/aml-capabilities';
 
 export interface AnalystDecisionAction {
@@ -32,6 +33,7 @@ export interface AgentChatInput {
   hasGroundTruthLabels: boolean;
   activeScreen: string;
   options: DetectionPipelineOptions;
+  recordAuditEvent?: (event: Omit<AgentAuditEvent, 'id' | 'sessionId' | 'timestamp' | 'actor' | 'screen'>) => Promise<void>;
 }
 
 const modelBaseURL = process.env.AGENT_MODEL_BASE_URL ?? 'http://127.0.0.1:11434/v1';
@@ -76,6 +78,21 @@ const modelProvider = createOpenAICompatible({
 });
 
 const capabilities = createAmlCapabilityRegistry();
+const toolCapabilities: Record<string, string> = {
+  analyzeCurrentDataset: 'overview.analyze_dataset',
+  compareDetectorSettings: 'overview.compare_detector_settings',
+  searchTraceLayer: 'overview.search_dataset',
+  validateActiveDataset: 'overview.validate_dataset',
+  inspectAlert: 'investigation.inspect_alert',
+  inspectAccount: 'investigation.account_activity',
+  lookupTransaction: 'investigation.lookup_transaction',
+  runAdversarialScenario: 'adversarial.run_scenario',
+  draftSarCase: 'dossier.draft_case',
+  evaluateCurrentDataset: 'evaluation.run_benchmark',
+  runBenchmark: 'evaluation.run_benchmark',
+  compareBenchmarks: 'evaluation.compare_benchmarks',
+  proposeAlertDisposition: 'investigation.propose_disposition',
+};
 
 export async function runAgentChat(input: AgentChatInput, abortSignal?: AbortSignal): Promise<{
   text: string;
@@ -294,7 +311,33 @@ export async function runAgentChat(input: AgentChatInput, abortSignal?: AbortSig
     `Analyst: ${input.message}`,
   ].filter(Boolean).join('\n\n');
 
-  const result = await agent.generate({prompt, abortSignal, timeout: {totalMs: 60_000, stepMs: 20_000}});
+  const auditToolCall = async (type: 'tool_call_started' | 'tool_call_completed', toolName: string, callId: string, durationMs?: number, outcome?: 'success' | 'error') => {
+    if (!input.recordAuditEvent) return;
+    const capabilityId = toolCapabilities[toolName];
+    const permission = capabilityId ? capabilities.descriptor(capabilityId).permission : 'read';
+    await input.recordAuditEvent({
+      type,
+      toolName,
+      ...(capabilityId ? {capabilityId} : {}),
+      permission,
+      callId,
+      ...(durationMs === undefined ? {} : {durationMs}),
+      ...(outcome ? {outcome} : {}),
+    });
+  };
+  const result = await agent.generate({
+    prompt,
+    abortSignal,
+    timeout: {totalMs: 60_000, stepMs: 20_000},
+    onToolExecutionStart: async ({toolCall, callId}) => auditToolCall('tool_call_started', toolCall.toolName, callId),
+    onToolExecutionEnd: async ({toolCall, callId, toolExecutionMs, toolOutput}) => auditToolCall(
+      'tool_call_completed',
+      toolCall.toolName,
+      callId,
+      toolExecutionMs,
+      toolOutput.type === 'tool-error' ? 'error' : 'success',
+    ),
+  });
   return {
     text: result.text || 'I completed the requested TraceLayer action. See the returned action proposal, if any.',
     model: process.env.AGENT_MODEL ?? (isOllama ? 'qwen3.5:4b' : 'grok-4.7'),

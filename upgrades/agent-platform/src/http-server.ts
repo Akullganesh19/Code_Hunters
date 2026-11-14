@@ -1,5 +1,5 @@
 import {createServer, type ServerResponse} from 'node:http';
-import {createHash} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {createAmlCapabilityRegistry} from './capabilities/aml-capabilities';
 import {redactRun, SqliteAgentRunStore} from './sqlite-run-store';
@@ -7,6 +7,7 @@ import {AgentWorkflowRunner} from './workflow-runner';
 import {IdempotencyConflictError} from './run-store';
 import {fiveScreenReviewWorkflow} from './workflows/five-screen-review';
 import {runAgentChat} from './agent-chat';
+import type {AgentAuditEvent} from './contracts';
 import {APICallError} from 'ai';
 import {z} from 'zod';
 import {MAX_TRANSACTIONS_PER_REQUEST, validateTransactions} from '@tracelayer/aml-engine';
@@ -107,6 +108,18 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/agent/audit') {
+    const rawLimit = url.searchParams.get('limit');
+    const limit = rawLimit === null ? 100 : Number(rawLimit);
+    const sessionId = url.searchParams.get('sessionId') ?? undefined;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1_000 || (sessionId !== undefined && !/^[0-9a-f-]{36}$/i.test(sessionId))) {
+      sendJson(response, 400, {error: 'Audit limit must be 1 to 1,000 and sessionId must be a UUID.'});
+      return;
+    }
+    sendJson(response, 200, {events: await runStore!.auditEvents(limit, sessionId)});
+    return;
+  }
+
   if (request.method === 'GET' && url.pathname === '/api/agent/workflows') {
     sendJson(response, 200, {workflows: runner.listWorkflows()});
     return;
@@ -144,8 +157,33 @@ const server = createServer(async (request, response) => {
         sendJson(response, 400, {error: parsed.error.issues[0]?.message ?? 'Invalid agent chat request.'});
         return;
       }
-      const result = await runAgentChat(parsed.data, abortController.signal);
-      if (!abortController.signal.aborted && !response.destroyed) sendJson(response, 200, result);
+      const auditSessionId = randomUUID();
+      const recordAuditEvent = async (event: Omit<AgentAuditEvent, 'id' | 'sessionId' | 'timestamp' | 'actor' | 'screen'>) => {
+        await runStore!.appendAuditEvent({
+          ...event,
+          id: randomUUID(),
+          sessionId: auditSessionId,
+          timestamp: new Date().toISOString(),
+          actor: 'unattributed-local-session',
+          screen: parsed.data.activeScreen,
+        });
+      };
+      await recordAuditEvent({type: 'chat_started'});
+      try {
+        const result = await runAgentChat({...parsed.data, recordAuditEvent}, abortController.signal);
+        for (const action of result.pendingActions) {
+          await recordAuditEvent({type: 'analyst_action_proposed', actionType: action.type});
+        }
+        await recordAuditEvent({type: 'chat_completed'});
+        if (!abortController.signal.aborted && !response.destroyed) sendJson(response, 200, {...result, auditSessionId});
+      } catch (error) {
+        try {
+          await recordAuditEvent({type: abortController.signal.aborted ? 'chat_cancelled' : 'chat_failed', outcome: 'error'});
+        } catch {
+          console.error('[agent-audit] failed to persist chat outcome');
+        }
+        throw error;
+      }
     } catch (error) {
       if (abortController.signal.aborted || response.destroyed) return;
       console.error(`[agent-chat] ${error instanceof Error ? error.name : 'Error'}`);

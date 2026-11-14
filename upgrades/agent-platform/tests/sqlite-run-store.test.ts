@@ -3,7 +3,7 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type {AgentRun, AgentRunEvent} from '../src/contracts';
+import type {AgentAuditEvent, AgentRun, AgentRunEvent} from '../src/contracts';
 import {CapabilityRegistry} from '../src/capability-registry';
 import {SqliteAgentRunStore} from '../src/sqlite-run-store';
 import {AgentWorkflowRunner} from '../src/workflow-runner';
@@ -72,6 +72,44 @@ test('SQLite run history survives restart without persisting transaction content
       assert.equal(databaseText.includes(secret), false);
     }
     await reopened.close();
+  } finally {
+    await rm(directory, {recursive: true, force: true});
+  }
+});
+
+test('SQLite audit records tool metadata but strips prompts, arguments, and outputs', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tracelayer-agent-audit-'));
+  const databasePath = path.join(directory, 'runs.sqlite');
+  const makeEvent = (id: string, sessionId: string): AgentAuditEvent => ({
+    id,
+    sessionId,
+    timestamp: `2026-11-15T00:00:0${id.endsWith('1') ? '1' : '2'}.000Z`,
+    type: id.endsWith('1') ? 'tool_call_started' : 'tool_call_completed',
+    actor: 'unattributed-local-session',
+    screen: 'Investigation',
+    toolName: 'inspectAlert',
+    capabilityId: 'investigation.inspect_alert',
+    permission: 'read',
+    callId: `call-${id}`,
+    ...(id.endsWith('2') ? {outcome: 'success', durationMs: 12} : {}),
+  });
+
+  try {
+    const store = await SqliteAgentRunStore.open(databasePath);
+    const unsafe = {...makeEvent('event-1', 'session-a'), prompt: 'private analyst request', toolArguments: 'private transaction payload', toolOutput: 'private evidence'};
+    await store.appendAuditEvent(unsafe);
+    await store.appendAuditEvent(makeEvent('event-2', 'session-a'));
+    await store.appendAuditEvent(makeEvent('event-3', 'session-b'));
+
+    const sessionEvents = await store.auditEvents(10, 'session-a');
+    assert.deepEqual(sessionEvents.map(({type}) => type), ['tool_call_completed', 'tool_call_started']);
+    assert.equal(sessionEvents[0]?.toolName, 'inspectAlert');
+    assert.equal(sessionEvents[0]?.capabilityId, 'investigation.inspect_alert');
+    const rawDatabase = await readFile(databasePath, 'utf8');
+    assert.equal(rawDatabase.includes('private analyst request'), false);
+    assert.equal(rawDatabase.includes('private transaction payload'), false);
+    assert.equal(rawDatabase.includes('private evidence'), false);
+    await store.close();
   } finally {
     await rm(directory, {recursive: true, force: true});
   }

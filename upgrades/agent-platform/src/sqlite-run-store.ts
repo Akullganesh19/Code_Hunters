@@ -3,7 +3,7 @@ import {mkdir, readFile, rename, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import initSqlJs, {type Database} from 'sql.js';
-import type {AgentRun, AgentRunEvent} from './contracts';
+import type {AgentAuditEvent, AgentRun, AgentRunEvent} from './contracts';
 import {IdempotencyConflictError, type AgentRunStore} from './run-store';
 
 const require = createRequire(import.meta.url);
@@ -66,6 +66,24 @@ function redactEvent(event: AgentRunEvent): AgentRunEvent {
   };
 }
 
+function sanitizeAuditEvent(event: AgentAuditEvent): AgentAuditEvent {
+  return {
+    id: event.id,
+    sessionId: event.sessionId,
+    timestamp: event.timestamp,
+    type: event.type,
+    actor: 'unattributed-local-session',
+    screen: event.screen,
+    ...(event.toolName === undefined ? {} : {toolName: event.toolName}),
+    ...(event.capabilityId === undefined ? {} : {capabilityId: event.capabilityId}),
+    ...(event.permission === undefined ? {} : {permission: event.permission}),
+    ...(event.callId === undefined ? {} : {callId: event.callId}),
+    ...(event.outcome === undefined ? {} : {outcome: event.outcome}),
+    ...(event.actionType === undefined ? {} : {actionType: event.actionType}),
+    ...(event.durationMs === undefined ? {} : {durationMs: event.durationMs}),
+  };
+}
+
 function parseJson<T>(value: unknown): T {
   if (typeof value !== 'string') throw new Error('Agent run database contains an invalid record.');
   return JSON.parse(value) as T;
@@ -118,6 +136,13 @@ export class SqliteAgentRunStore implements AgentRunStore {
         fingerprint TEXT NOT NULL,
         run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS agent_audit_events (
+        event_id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_audit_time ON agent_audit_events(timestamp DESC);
     `);
     await store.recoverInterruptedRuns();
     await store.persist();
@@ -198,6 +223,38 @@ export class SqliteAgentRunStore implements AgentRunStore {
       [runId],
     );
     return (result[0]?.values ?? []).map(([payload]) => parseJson<AgentRunEvent>(payload));
+  }
+
+  async appendAuditEvent(event: AgentAuditEvent): Promise<void> {
+    const safeEvent = sanitizeAuditEvent(event);
+    this.database.run(
+      'INSERT INTO agent_audit_events (event_id, timestamp, session_id, payload) VALUES (?, ?, ?, ?)',
+      [safeEvent.id, safeEvent.timestamp, safeEvent.sessionId, JSON.stringify(safeEvent)],
+    );
+    this.database.run(
+      `DELETE FROM agent_audit_events
+       WHERE event_id IN (
+         SELECT event_id FROM agent_audit_events
+         ORDER BY timestamp DESC, event_id DESC
+         LIMIT -1 OFFSET ?
+       )`,
+      [this.retentionLimit * 20],
+    );
+    await this.persist();
+  }
+
+  async auditEvents(limit: number, sessionId?: string): Promise<AgentAuditEvent[]> {
+    const safeLimit = Math.max(1, Math.min(1_000, Math.trunc(limit)));
+    const result = sessionId
+      ? this.database.exec(
+        'SELECT payload FROM agent_audit_events WHERE session_id = ? ORDER BY timestamp DESC, event_id DESC LIMIT ?',
+        [sessionId, safeLimit],
+      )
+      : this.database.exec(
+        'SELECT payload FROM agent_audit_events ORDER BY timestamp DESC, event_id DESC LIMIT ?',
+        [safeLimit],
+      );
+    return (result[0]?.values ?? []).map(([payload]) => parseJson<AgentAuditEvent>(payload));
   }
 
   async close(): Promise<void> {

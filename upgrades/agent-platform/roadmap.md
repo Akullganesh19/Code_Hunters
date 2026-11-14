@@ -4,7 +4,7 @@
 
 The local app has a model-backed chat agent using the configured OpenAI-compatible provider (Groq or local Ollama) through the AI SDK. The agent has typed tools for all five current screens, can navigate the workspace and open verified alerts, and can propose a Confirmed/Dismissed disposition; the analyst must apply that proposal in the UI. The prior deterministic five-screen workflow remains available.
 
-The conversational model is configured through an OpenAI-compatible endpoint. The app does not ship or train model weights. An internal service token and durable redacted SQLite workflow summaries are implemented. There is no per-user identity, tenant isolation, durable queue, or complete production audit retention. Do not expose this system or use it with real customer data.
+The conversational model is configured through an OpenAI-compatible endpoint. The app does not ship or train model weights. An internal service token, durable redacted SQLite workflow summaries, and privacy-conscious chat/tool-call audit events are implemented. There is no per-user identity, tenant isolation, server-side durable queue, or production-grade audit integrity/export. Do not expose this system or use it with real customer data.
 
 The transaction CSV remains separate and is not used to train the language model. Agent quality still needs a reviewed instruction/action evaluation set before making production reliability claims.
 
@@ -24,8 +24,8 @@ Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MOD
 
 - Propagate interactive chat cancellation from the browser disconnect through the HTTP handler to the model provider. Implemented for chat requests.
 - Add a durable restartable queue and bounded retries. Workflow cancellation and durable request-level idempotency are implemented. A connected browser now retries an interrupted run once by resubmitting the same request and idempotency key; the service still does not retain encrypted job inputs or resume queued work on its own.
-- Add complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
-- Add machine-readable input/output schemas for the versioned capabilities and audit tool calls without storing unnecessary transaction contents. Positive capability contract versions and registry/manifest parity are implemented.
+- Add complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage. Chat lifecycle, tool-call start/completion, and proposed-action type are stored without prompts, tool arguments, or outputs; per-user identity and audit integrity controls remain open.
+- Add machine-readable input/output schemas for the versioned capabilities and audit tool calls without storing unnecessary transaction contents. Positive capability contract versions, registry/manifest parity, and metadata-only tool-call audit events are implemented.
 - Show progress, evidence, and pending analyst actions consistently in the frontend.
 
 **Done when:** a run survives service restarts and can be inspected later with a complete, access-controlled history.
