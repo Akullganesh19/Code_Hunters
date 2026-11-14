@@ -23,13 +23,34 @@ test('registers an action for each of the five current screens', () => {
 test('publishes a positive version for every registered capability contract', async () => {
   const registry = createAmlCapabilityRegistry();
   const manifest = JSON.parse(await readFile(new URL('../capabilities.json', import.meta.url), 'utf8')) as {
-    capabilities: Array<{id: string; contractVersion?: number}>;
+    $defs: Record<string, unknown>;
+    capabilities: Array<{id: string; screen: string; permission: string; contractVersion?: number; inputSchema?: unknown; outputSchema?: unknown}>;
   };
   const registered = registry.list();
   assert.deepEqual(manifest.capabilities.map(({id}) => id).sort(), registered.map(({id}) => id).sort());
   for (const descriptor of registered) {
     assert.ok(Number.isInteger(descriptor.contractVersion) && descriptor.contractVersion > 0);
     assert.equal(manifest.capabilities.find(({id}) => id === descriptor.id)?.contractVersion, descriptor.contractVersion);
+    const contract = manifest.capabilities.find(({id}) => id === descriptor.id);
+    assert.equal(contract?.screen, descriptor.screen);
+    assert.equal(contract?.permission, descriptor.permission);
+    assert.ok(contract?.inputSchema && typeof contract.inputSchema === 'object');
+    assert.ok(contract?.outputSchema && typeof contract.outputSchema === 'object');
+    assert.deepEqual(descriptor.inputSchema, contract.inputSchema);
+    assert.deepEqual(descriptor.outputSchema, contract.outputSchema);
+  }
+  const assertLocalReferences = (value: unknown): void => {
+    if (Array.isArray(value)) return value.forEach(assertLocalReferences);
+    if (!value || typeof value !== 'object') return;
+    const object = value as Record<string, unknown>;
+    if (typeof object.$ref === 'string' && object.$ref.startsWith('#/$defs/')) {
+      assert.ok(object.$ref.slice('#/$defs/'.length) in manifest.$defs, `Unresolved schema reference: ${object.$ref}`);
+    }
+    Object.values(object).forEach(assertLocalReferences);
+  };
+  for (const contract of manifest.capabilities) {
+    assertLocalReferences(contract.inputSchema);
+    assertLocalReferences(contract.outputSchema);
   }
 });
 

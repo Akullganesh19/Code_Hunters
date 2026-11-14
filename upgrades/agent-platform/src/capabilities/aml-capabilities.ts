@@ -371,7 +371,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
       id: 'investigation.propose_disposition',
       contractVersion: 1,
       screen: 'investigation',
-      permission: 'write',
+      permission: 'draft',
       description: 'Prepare a Confirmed or Dismissed disposition proposal; the analyst must apply it in the UI.',
     },
     execute(input) {

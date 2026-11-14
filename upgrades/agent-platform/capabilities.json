@@ -1,89 +1,193 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": 1,
+  "$defs": {
+    "Transaction": {
+      "type": "object",
+      "required": ["tx_id", "sender", "receiver", "amount", "timestamp"],
+      "properties": {
+        "tx_id": {"type": ["string", "number"]},
+        "sender": {"type": ["string", "number"]},
+        "receiver": {"type": ["string", "number"]},
+        "amount": {"type": ["string", "number"]},
+        "timestamp": {"type": ["string", "number"]},
+        "is_laundering": {"type": "integer", "enum": [0, 1]},
+        "ring_id": {"type": "string"},
+        "typology_label": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "Transactions": {"type": "array", "maxItems": 50000, "items": {"$ref": "#/$defs/Transaction"}},
+    "DetectorOptions": {
+      "type": "object",
+      "properties": {
+        "K": {"type": "integer", "minimum": 2, "maximum": 100},
+        "WHours": {"type": "number", "minimum": 1, "maximum": 720},
+        "cycleWHours": {"type": "number", "minimum": 1, "maximum": 720},
+        "HMinutes": {"type": "number", "minimum": 1, "maximum": 1440},
+        "minRetention": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "Dataset": {
+      "type": "object",
+      "required": ["transactions"],
+      "properties": {
+        "transactions": {"$ref": "#/$defs/Transactions"},
+        "options": {"$ref": "#/$defs/DetectorOptions"},
+        "hasGroundTruthLabels": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "Alert": {
+      "type": "object",
+      "required": ["alert_id", "typology", "accounts", "tx_ids", "priority_score"],
+      "properties": {
+        "alert_id": {"type": "string"},
+        "typology": {"type": "string"},
+        "accounts": {"type": "array", "items": {"type": "string"}},
+        "tx_ids": {"type": "array", "items": {"type": "string"}},
+        "priority_score": {"type": "number"},
+        "total_amount": {"type": "number"}
+      },
+      "additionalProperties": true
+    },
+    "AlertArray": {"type": "array", "items": {"$ref": "#/$defs/Alert"}},
+    "Metrics": {
+      "type": "object",
+      "required": ["precision", "recall", "f1"],
+      "properties": {"precision": {"type": "number"}, "recall": {"type": "number"}, "f1": {"type": "number"}},
+      "additionalProperties": true
+    },
+    "EvaluationReport": {
+      "type": "object",
+      "required": ["seed", "splitRatio", "trainRows", "testRows", "baselineConfusion", "graphConfusion", "hybridConfusion", "telemetry"],
+      "properties": {
+        "seed": {"type": "integer"},
+        "splitRatio": {"type": "number"},
+        "trainRows": {"type": "integer"},
+        "testRows": {"type": "integer"},
+        "baselineConfusion": {"type": "object"},
+        "graphConfusion": {"type": "object"},
+        "hybridConfusion": {"type": "object"},
+        "telemetry": {"type": "object"}
+      },
+      "additionalProperties": true
+    }
+  },
   "capabilities": [
     {
       "id": "overview.validate_dataset",
       "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
-      "description": "Validate required transaction fields and return privacy-conscious dataset coverage diagnostics without exposing rows."
+      "description": "Validate required transaction fields and return privacy-conscious dataset coverage diagnostics without exposing rows.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}]},
+      "outputSchema": {
+        "oneOf": [
+          {"type": "object", "required": ["valid", "transactionCount", "uniqueAccountCount", "totalVolume", "labelCoverage", "note"], "properties": {"valid": {"const": true}, "transactionCount": {"type": "integer"}, "uniqueAccountCount": {"type": "integer"}, "totalVolume": {"type": "number"}, "timeWindow": {"type": ["object", "null"]}, "labelCoverage": {"type": "object"}, "note": {"type": "string"}}},
+          {"type": "object", "required": ["valid", "transactionCount", "issue", "note"], "properties": {"valid": {"const": false}, "transactionCount": {"type": "integer"}, "issue": {"type": "string"}, "rowIndex": {"type": "integer"}, "field": {"type": "string"}, "note": {"type": "string"}}}
+        ]
+      }
     },
     {
       "id": "overview.search_dataset",
       "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
-      "description": "Search current alerts, accounts, and transaction IDs in the active dataset."
+      "description": "Search current alerts, accounts, and transaction IDs in the active dataset.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "properties": {"query": {"type": "string", "maxLength": 160}}}]},
+      "outputSchema": {"type": "object", "required": ["query", "totalMatches", "results"], "properties": {"query": {"type": "string"}, "totalMatches": {"type": "integer"}, "results": {"type": "array", "maxItems": 12, "items": {"type": "object", "required": ["kind", "id", "title", "subtitle", "linkedAlertId", "matchRank"], "properties": {"kind": {"enum": ["alert", "account", "transaction"]}, "id": {"type": "string"}, "title": {"type": "string"}, "subtitle": {"type": "string"}, "linkedAlertId": {"type": ["string", "null"]}, "matchRank": {"type": "integer"}}}}}}
     },
     {
       "id": "overview.compare_detector_settings",
       "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
-      "description": "Compare candidate detector settings with active findings without changing the current dataset or settings."
+      "description": "Compare candidate detector settings with active findings without changing the current dataset or settings.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["baselineAlerts", "candidateOptions"], "properties": {"baselineAlerts": {"$ref": "#/$defs/AlertArray"}, "candidateOptions": {"$ref": "#/$defs/DetectorOptions", "minProperties": 1}}}]},
+      "outputSchema": {"type": "object", "required": ["baselineAlertCount", "candidateAlertCount", "addedAlertCount", "removedAlertCount", "unchangedAlertCount", "candidateOptions", "runtimeMs"], "properties": {"baselineAlertCount": {"type": "integer"}, "candidateAlertCount": {"type": "integer"}, "addedAlertCount": {"type": "integer"}, "removedAlertCount": {"type": "integer"}, "unchangedAlertCount": {"type": "integer"}, "candidateOptions": {"$ref": "#/$defs/DetectorOptions"}, "runtimeMs": {"type": "number"}, "addedExamples": {"type": "array", "items": {"type": "object", "required": ["alertId", "typology", "priority", "accounts", "transactionIds"], "properties": {"alertId": {"type": "string"}, "typology": {"type": "string"}, "priority": {"type": "number"}, "accounts": {"type": "array", "items": {"type": "string"}}, "transactionIds": {"type": "array", "items": {"type": "string"}}}}}, "removedExamples": {"type": "array", "items": {"type": "object", "required": ["alertId", "typology", "priority", "accounts", "transactionIds"]}}, "note": {"type": "string"}}}
     },
     {
       "id": "overview.analyze_dataset",
       "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
-      "description": "Validate a dataset, run the AML analysis pipeline, and return ranked alerts with transaction evidence."
+      "description": "Validate a dataset, run the AML analysis pipeline, and return ranked alerts with transaction evidence.",
+      "inputSchema": {"$ref": "#/$defs/Dataset"},
+      "outputSchema": {"type": "object", "required": ["edges", "alerts", "runtimeMs", "edgesPerSec"], "properties": {"edges": {"$ref": "#/$defs/Transactions"}, "alerts": {"$ref": "#/$defs/AlertArray"}, "runtimeMs": {"type": "number"}, "edgesPerSec": {"type": "number"}}}
     },
     {
       "id": "investigation.inspect_alert",
       "contractVersion": 1,
       "screen": "investigation",
       "permission": "read",
-      "description": "Build a chronological alert timeline, bounded graph context, and evidence-linked alternative explanations."
+      "description": "Build a chronological alert timeline, bounded graph context, and evidence-linked alternative explanations.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "properties": {"alert": {"$ref": "#/$defs/Alert"}}}]},
+      "outputSchema": {"type": "object", "required": ["motifEdges", "contextEdges", "combinedEdges"], "properties": {"motifEdges": {"$ref": "#/$defs/Transactions"}, "contextEdges": {"$ref": "#/$defs/Transactions"}, "combinedEdges": {"$ref": "#/$defs/Transactions"}, "message": {"type": "string"}}}
     },
     {
       "id": "investigation.lookup_transaction",
       "contractVersion": 1,
       "screen": "investigation",
       "permission": "read",
-      "description": "Look up one transaction by exact ID and return linked alert evidence."
+      "description": "Look up one transaction by exact ID and return linked alert evidence.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["txId"], "properties": {"txId": {"type": "string", "maxLength": 160}}}]},
+      "outputSchema": {"oneOf": [{"type": "object", "required": ["found", "txId"], "properties": {"found": {"const": false}, "txId": {"type": "string"}}}, {"type": "object", "required": ["found", "transaction", "linkedAlerts"], "properties": {"found": {"const": true}, "transaction": {"$ref": "#/$defs/Transaction"}, "linkedAlerts": {"type": "array", "items": {"type": "object", "required": ["alertId", "typology"]}}}}]}
     },
     {
       "id": "investigation.account_activity",
       "contractVersion": 1,
       "screen": "investigation",
       "permission": "read",
-      "description": "Summarize an account’s transaction activity and linked alerts."
+      "description": "Summarize an account’s transaction activity and linked alerts.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["accountId"], "properties": {"accountId": {"type": "string", "maxLength": 160}}}]},
+      "outputSchema": {"type": "object", "required": ["accountId", "transactionCount", "inboundCount", "outboundCount", "totalVolume", "linkedAlerts", "recentTransactions"], "properties": {"accountId": {"type": "string"}, "transactionCount": {"type": "integer"}, "inboundCount": {"type": "integer"}, "outboundCount": {"type": "integer"}, "totalVolume": {"type": "number"}, "linkedAlerts": {"type": "array"}, "recentTransactions": {"type": "array", "maxItems": 30, "items": {"$ref": "#/$defs/Transaction"}}}}
     },
     {
       "id": "investigation.propose_disposition",
       "contractVersion": 1,
       "screen": "investigation",
       "permission": "draft",
-      "description": "Propose a Confirmed or Dismissed disposition and require analyst confirmation."
+      "description": "Propose a Confirmed or Dismissed disposition and require analyst confirmation.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["alertId", "decision"], "properties": {"alertId": {"type": "string"}, "decision": {"enum": ["Confirmed", "Dismissed"]}}}]},
+      "outputSchema": {"type": "object", "required": ["requiresAnalystConfirmation", "alertId", "decision", "typology", "message"], "properties": {"requiresAnalystConfirmation": {"const": true}, "alertId": {"type": "string"}, "decision": {"enum": ["Confirmed", "Dismissed"]}, "typology": {"type": "string"}, "message": {"type": "string"}}}
     },
     {
       "id": "adversarial.run_scenario",
       "contractVersion": 1,
       "screen": "adversarial_lab",
       "permission": "read",
-      "description": "Run a synthetic motif scenario and compare graph detection with configured baselines."
+      "description": "Run a synthetic motif scenario and compare graph detection with configured baselines.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["config"], "properties": {"config": {"type": "object", "required": ["typology", "hopCount", "retentionRatio", "hopDelayMinutes", "amountPerTx", "wrongTimeOrder"], "properties": {"typology": {"enum": ["Rapid Pass-through", "Chronological Cycle", "Fan-in/Fan-out"]}, "hopCount": {"type": "integer", "minimum": 2, "maximum": 6}, "retentionRatio": {"type": "number", "minimum": 0.1, "maximum": 1}, "hopDelayMinutes": {"type": "integer", "minimum": 1, "maximum": 1440}, "amountPerTx": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000000}, "wrongTimeOrder": {"type": "boolean"}}, "additionalProperties": false}, "baselineThreshold": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000000}}}]},
+      "outputSchema": {"type": "object", "required": ["injectedTxIds", "injectedAccounts", "matchingAlerts", "graphCaughtCount", "baselineCaughtCount", "totalInjected"], "properties": {"injectedTxIds": {"type": "array", "items": {"type": "string"}}, "injectedAccounts": {"type": "array", "items": {"type": "string"}}, "matchingAlerts": {"$ref": "#/$defs/AlertArray"}, "graphCaughtCount": {"type": "integer"}, "baselineCaughtCount": {"type": "integer"}, "totalInjected": {"type": "integer"}}}
     },
     {
       "id": "dossier.draft_case",
       "contractVersion": 1,
       "screen": "sar_dossier",
       "permission": "draft",
-      "description": "Prepare a case draft, validate evidence links and digest against the active dataset, and return Markdown only when checks pass."
+      "description": "Prepare a case draft, validate evidence links and digest against the active dataset, and return Markdown only when checks pass.",
+      "inputSchema": {"allOf": [{"$ref": "#/$defs/Dataset"}, {"type": "object", "required": ["alerts"], "properties": {"alerts": {"$ref": "#/$defs/AlertArray"}, "sourceLabel": {"type": "string", "maxLength": 200}}}]},
+      "outputSchema": {"type": "object", "required": ["dossier", "validation", "draftReady"], "properties": {"dossier": {"type": "object", "required": ["caseId", "sha256Digest", "evidenceLedger", "alerts"]}, "validation": {"type": "object", "required": ["valid", "checks", "note"]}, "draftReady": {"type": "boolean"}, "markdown": {"type": "string"}}}
     },
     {
       "id": "evaluation.compare_benchmarks",
       "contractVersion": 1,
       "screen": "evaluation",
       "permission": "read",
-      "description": "Compare held-out metrics across two bounded deterministic synthetic benchmark seeds and report seed sensitivity."
+      "description": "Compare held-out metrics across two bounded deterministic synthetic benchmark seeds and report seed sensitivity.",
+      "inputSchema": {"type": "object", "properties": {"rows": {"type": "integer", "minimum": 100, "maximum": 25000, "default": 4000}, "seedA": {"type": "integer", "minimum": 1, "maximum": 99999, "default": 42}, "seedB": {"type": "integer", "minimum": 1, "maximum": 99999, "default": 43}, "splitRatio": {"type": "number", "minimum": 0.6, "maximum": 0.8, "default": 0.7}}, "additionalProperties": false, "x-validation": "seedA and seedB must differ"},
+      "outputSchema": {"type": "object", "required": ["synthetic", "rows", "splitRatio", "runs", "candidateMinusBaseline", "interpretation"], "properties": {"synthetic": {"const": true}, "rows": {"type": "integer"}, "splitRatio": {"type": "number"}, "runs": {"type": "array", "minItems": 2, "maxItems": 2}, "candidateMinusBaseline": {"type": "object"}, "interpretation": {"type": "string"}}}
     },
     {
       "id": "evaluation.run_benchmark",
       "contractVersion": 1,
       "screen": "evaluation",
       "permission": "read",
-      "description": "Run a reproducible benchmark and report metrics, counterexamples, and drift indicators."
+      "description": "Run a reproducible benchmark and report metrics, counterexamples, and drift indicators.",
+      "inputSchema": {"type": "object", "properties": {"rows": {"type": "integer", "minimum": 100, "maximum": 25000, "default": 4000}, "seed": {"type": "integer", "minimum": 1, "maximum": 99999, "default": 42}, "splitRatio": {"type": "number", "minimum": 0.6, "maximum": 0.8, "default": 0.7}}, "additionalProperties": false},
+      "outputSchema": {"$ref": "#/$defs/EvaluationReport"}
     }
   ]
 }

@@ -3,6 +3,21 @@ import type {
   CapabilityContext,
   CapabilityDescriptor,
 } from './contracts';
+import {readFileSync} from 'node:fs';
+
+type JsonSchema = Record<string, unknown>;
+type CapabilityContract = {
+  id: string;
+  contractVersion: number;
+  screen: CapabilityDescriptor['screen'];
+  permission: CapabilityDescriptor['permission'];
+  inputSchema: JsonSchema;
+  outputSchema: JsonSchema;
+};
+
+const manifest = JSON.parse(readFileSync(new URL('../capabilities.json', import.meta.url), 'utf8')) as {
+  capabilities: CapabilityContract[];
+};
 
 export class CapabilityRegistry {
   private readonly capabilities = new Map<string, Capability>();
@@ -21,10 +36,18 @@ export class CapabilityRegistry {
     this.capabilities.set(id, capability as Capability);
   }
 
-  list(): CapabilityDescriptor[] {
-    return [...this.capabilities.values()]
-      .map(({descriptor}) => ({...descriptor}))
-      .sort((a, b) => a.id.localeCompare(b.id));
+  list(): Array<CapabilityDescriptor & Pick<CapabilityContract, 'inputSchema' | 'outputSchema'>> {
+    if (this.capabilities.size !== manifest.capabilities.length) {
+      throw new Error('Registered capabilities do not match the published capability contract manifest.');
+    }
+    return [...this.capabilities.values()].map(({descriptor}) => {
+      const contract = manifest.capabilities.find(({id}) => id === descriptor.id);
+      if (!contract || contract.contractVersion !== descriptor.contractVersion ||
+          contract.screen !== descriptor.screen || contract.permission !== descriptor.permission) {
+        throw new Error(`Capability "${descriptor.id}" does not match its published contract metadata.`);
+      }
+      return {...descriptor, inputSchema: contract.inputSchema, outputSchema: contract.outputSchema};
+    }).sort((a, b) => a.id.localeCompare(b.id));
   }
 
   has(id: string): boolean {
