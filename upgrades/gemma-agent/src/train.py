@@ -73,6 +73,7 @@ def main() -> None:
 
     args.output.mkdir(parents=True, exist_ok=True)
     model.backbone.save_lora_weights(str(args.output / "adapter.weights.h5"))
+    metrics = {name: [float(value) for value in values] for name, values in history.history.items()}
     with (args.output / "training.json").open("w", encoding="utf-8") as stream:
         json.dump(
             {
@@ -83,7 +84,7 @@ def main() -> None:
                 "epochs": args.epochs,
                 "learning_rate": args.learning_rate,
                 "dtype": args.dtype,
-                "history": history.history,
+                "history": metrics,
             },
             stream,
             indent=2,
