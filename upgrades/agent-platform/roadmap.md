@@ -22,8 +22,9 @@ Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MOD
 
 ## Phase 2 — reliable state
 
-- Add cancellation, retry limits, idempotency, and complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
-- Add a job queue with cancellation, retry limits, and idempotency.
+- Propagate interactive chat cancellation from the browser disconnect through the HTTP handler to the model provider. Implemented for chat requests.
+- Add a durable job queue with workflow cancellation, retry limits, and idempotency.
+- Add complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
 - Version capability input/output contracts and audit tool calls without storing unnecessary transaction contents.
 - Show progress, evidence, and pending analyst actions consistently in the frontend.
 

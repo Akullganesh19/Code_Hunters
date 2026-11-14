@@ -77,7 +77,7 @@ const modelProvider = createOpenAICompatible({
 
 const capabilities = createAmlCapabilityRegistry();
 
-export async function runAgentChat(input: AgentChatInput): Promise<{
+export async function runAgentChat(input: AgentChatInput, abortSignal?: AbortSignal): Promise<{
   text: string;
   model: string;
   pendingActions: Array<AnalystDecisionAction | AgentNavigationAction>;
@@ -294,7 +294,7 @@ export async function runAgentChat(input: AgentChatInput): Promise<{
     `Analyst: ${input.message}`,
   ].filter(Boolean).join('\n\n');
 
-  const result = await agent.generate({prompt, timeout: {totalMs: 60_000, stepMs: 20_000}});
+  const result = await agent.generate({prompt, abortSignal, timeout: {totalMs: 60_000, stepMs: 20_000}});
   return {
     text: result.text || 'I completed the requested TraceLayer action. See the returned action proposal, if any.',
     model: process.env.AGENT_MODEL ?? (isOllama ? 'qwen3.5:4b' : 'grok-4.7'),

@@ -128,15 +128,24 @@ const server = createServer(async (request, response) => {
       return;
     }
     activeAgentRequests++;
+    const abortController = new AbortController();
+    const abortWhenDisconnected = () => {
+      if (!response.writableEnded && !abortController.signal.aborted) {
+        abortController.abort(new Error('Analyst disconnected before the agent finished.'));
+      }
+    };
+    request.once('aborted', abortWhenDisconnected);
+    response.once('close', abortWhenDisconnected);
     try {
       const parsed = chatRequestSchema.safeParse(await readJsonBody(request, maxBodyBytes));
       if (!parsed.success) {
         sendJson(response, 400, {error: parsed.error.issues[0]?.message ?? 'Invalid agent chat request.'});
         return;
       }
-      const result = await runAgentChat(parsed.data);
-      sendJson(response, 200, result);
+      const result = await runAgentChat(parsed.data, abortController.signal);
+      if (!abortController.signal.aborted && !response.destroyed) sendJson(response, 200, result);
     } catch (error) {
+      if (abortController.signal.aborted || response.destroyed) return;
       console.error(`[agent-chat] ${error instanceof Error ? error.name : 'Error'}`);
       const rateLimited = APICallError.isInstance(error) && error.statusCode === 429;
       if (rateLimited) response.setHeader('retry-after', error.responseHeaders?.['retry-after'] ?? '2');
@@ -156,6 +165,8 @@ const server = createServer(async (request, response) => {
                 : 'The configured agent model provider could not complete the request. Check the provider endpoint, model, credentials, and availability.',
       });
     } finally {
+      request.off('aborted', abortWhenDisconnected);
+      response.off('close', abortWhenDisconnected);
       activeAgentRequests--;
     }
     return;

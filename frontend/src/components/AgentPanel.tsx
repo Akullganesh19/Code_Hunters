@@ -1,5 +1,5 @@
-import {useEffect, useState, type FormEvent} from 'react';
-import {ArrowUp, Bot, CheckCircle2, Circle, LoaderCircle, ShieldCheck, X} from 'lucide-react';
+import {useEffect, useRef, useState, type FormEvent} from 'react';
+import {ArrowUp, Bot, CheckCircle2, Circle, LoaderCircle, ShieldCheck, Square, X} from 'lucide-react';
 import type {DetectionPipelineOptions, ScreenId, TransactionEdge} from '@tracelayer/aml-engine';
 import {
   sendAgentMessage,
@@ -65,6 +65,14 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
   const [pendingActions, setPendingActions] = useState<Array<AgentUiAction & {key: number}>>([]);
   const [modelName, setModelName] = useState('Configured model');
   const [error, setError] = useState<string | null>(null);
+  const chatAbortController = useRef<AbortController | null>(null);
+
+  useEffect(() => () => chatAbortController.current?.abort(), []);
+
+  function closePanel() {
+    chatAbortController.current?.abort();
+    onClose();
+  }
 
   useEffect(() => {
     let active = true;
@@ -96,6 +104,8 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
     if (!message || sending) return;
 
     const history = messages;
+    const controller = new AbortController();
+    chatAbortController.current = controller;
     setDraft('');
     setSending(true);
     setError(null);
@@ -109,6 +119,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
         hasGroundTruthLabels,
         activeScreen,
         options,
+        signal: controller.signal,
       });
       setModelName(result.model);
       setMessages([...history, {role: 'user', content: message}, {role: 'assistant', content: result.text}]);
@@ -120,17 +131,22 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
         }
       });
     } catch (cause) {
-      setMessages(history);
-      setDraft(message);
-      setError(cause instanceof Error ? cause.message : 'The TraceLayer agent could not respond.');
+      if (controller.signal.aborted) {
+        setMessages([...history, {role: 'user', content: message}, {role: 'assistant', content: 'Request cancelled.'}]);
+      } else {
+        setMessages(history);
+        setDraft(message);
+        setError(cause instanceof Error ? cause.message : 'The TraceLayer agent could not respond.');
+      }
     } finally {
+      if (chatAbortController.current === controller) chatAbortController.current = null;
       setSending(false);
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+      if (event.target === event.currentTarget) closePanel();
     }}>
       <section role="dialog" aria-modal="true" aria-labelledby="agent-panel-title" className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#101a14] shadow-2xl">
         <header className="flex items-start justify-between border-b border-white/10 p-5">
@@ -141,7 +157,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
               <p className="mt-1 text-xs text-[#93a199]">{modelName} · {activeScreen}</p>
             </div>
           </div>
-          <button type="button" aria-label="Close agent panel" onClick={onClose} className="rounded-lg p-2 text-[#93a199] hover:bg-white/10 hover:text-white"><X size={18} /></button>
+          <button type="button" aria-label="Close agent panel" onClick={closePanel} className="rounded-lg p-2 text-[#93a199] hover:bg-white/10 hover:text-white"><X size={18} /></button>
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
@@ -236,9 +252,9 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
               placeholder="Ask TraceLayer to investigate, search, simulate, or draft…"
               className="max-h-32 min-h-12 flex-1 resize-y bg-transparent px-2 py-1 text-sm text-white outline-none placeholder:text-[#718078]"
             />
-            <button type="submit" aria-label="Send message" disabled={!draft.trim() || sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40">
-              {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-            </button>
+            {sending
+              ? <button type="button" aria-label="Stop agent response" onClick={() => chatAbortController.current?.abort()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/80 text-white hover:bg-rose-400"><Square className="h-3.5 w-3.5" /></button>
+              : <button type="submit" aria-label="Send message" disabled={!draft.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"><ArrowUp className="h-4 w-4" /></button>}
           </div>
           <p className="mt-2 text-center text-[10px] text-[#718078]">Disposition proposals need your confirmation · SAR drafts are never filed by the agent</p>
         </form>

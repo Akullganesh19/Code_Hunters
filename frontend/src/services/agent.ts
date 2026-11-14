@@ -57,12 +57,15 @@ export async function sendAgentMessage(args: {
   hasGroundTruthLabels: boolean;
   activeScreen: string;
   options: DetectionPipelineOptions;
+  signal?: AbortSignal;
 }): Promise<AgentChatResponse> {
+  const {signal, ...payloadArgs} = args;
   const response = await fetch(`${agentBaseUrl}/api/agent/chat`, {
     method: 'POST',
     credentials: 'same-origin',
     headers: {'content-type': 'application/json'},
-    body: JSON.stringify({...args, history: args.history.slice(-10)}),
+    body: JSON.stringify({...payloadArgs, history: args.history.slice(-10)}),
+    signal,
   });
   const payload = (await response.json()) as AgentChatResponse & {error?: string};
   if (!response.ok) throw new Error(payload.error ?? 'The TraceLayer agent could not respond.');
