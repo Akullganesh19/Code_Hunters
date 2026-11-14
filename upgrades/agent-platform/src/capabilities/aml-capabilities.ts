@@ -6,6 +6,8 @@ import {
   generateIbmAmlBenchmark,
   injectAdversarialMotif,
   runDetectionPipeline,
+  searchDataset,
+  validateTransactions,
   type AdversarialMotifConfig,
   type Alert,
   type RawTransactionInput,
@@ -29,6 +31,21 @@ function transactionsFrom(input: Record<string, unknown>): RawTransactionInput[]
 
 export function createAmlCapabilityRegistry(): CapabilityRegistry {
   const registry = new CapabilityRegistry();
+
+  registry.register({
+    descriptor: {
+      id: 'overview.search_dataset',
+      screen: 'overview',
+      permission: 'read',
+      description: 'Search current alerts, accounts, and transaction IDs in the active dataset.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const edges = validateTransactions(transactionsFrom(payload));
+      const analysis = runDetectionPipeline(edges, payload.options as never);
+      return searchDataset(String(payload.query ?? ''), edges, analysis.alerts, 12);
+    },
+  });
 
   registry.register({
     descriptor: {
@@ -69,6 +86,82 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
         };
       }
       return extractMotifSubgraph(edges, alert, 75);
+    },
+  });
+
+  registry.register({
+    descriptor: {
+      id: 'investigation.lookup_transaction',
+      screen: 'investigation',
+      permission: 'read',
+      description: 'Look up one transaction by exact ID and return linked alert evidence.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const txId = String(payload.txId ?? '');
+      const edges = validateTransactions(transactionsFrom(payload));
+      const transaction = edges.find((edge) => edge.tx_id === txId);
+      if (!transaction) return {found: false, txId};
+      const analysis = runDetectionPipeline(edges, payload.options as never);
+      const linkedAlerts = analysis.alerts
+        .filter((alert) => alert.tx_ids.includes(txId))
+        .map((alert) => ({alertId: alert.alert_id, typology: alert.typology}));
+      return {found: true, transaction, linkedAlerts};
+    },
+  });
+
+  registry.register({
+    descriptor: {
+      id: 'investigation.account_activity',
+      screen: 'investigation',
+      permission: 'read',
+      description: 'Summarize an account’s transaction activity and linked alerts.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const accountId = String(payload.accountId ?? '');
+      const edges = validateTransactions(transactionsFrom(payload));
+      const activity = edges.filter((edge) => edge.sender === accountId || edge.receiver === accountId);
+      const analysis = runDetectionPipeline(edges, payload.options as never);
+      return {
+        accountId,
+        transactionCount: activity.length,
+        inboundCount: activity.filter((edge) => edge.receiver === accountId).length,
+        outboundCount: activity.filter((edge) => edge.sender === accountId).length,
+        totalVolume: Math.round(activity.reduce((sum, edge) => sum + edge.amount, 0) * 100) / 100,
+        linkedAlerts: analysis.alerts
+          .filter((alert) => alert.accounts.includes(accountId))
+          .map((alert) => ({alertId: alert.alert_id, typology: alert.typology, priority: alert.priority_score})),
+        recentTransactions: activity.slice(-30),
+      };
+    },
+  });
+
+  registry.register({
+    descriptor: {
+      id: 'investigation.propose_disposition',
+      screen: 'investigation',
+      permission: 'write',
+      description: 'Prepare a Confirmed or Dismissed disposition proposal; the analyst must apply it in the UI.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const alertId = String(payload.alertId ?? '');
+      const decision = payload.decision;
+      if (decision !== 'Confirmed' && decision !== 'Dismissed') {
+        throw new Error('Decision must be Confirmed or Dismissed.');
+      }
+      const edges = validateTransactions(transactionsFrom(payload));
+      const analysis = runDetectionPipeline(edges, payload.options as never);
+      const alert = analysis.alerts.find((item) => item.alert_id === alertId);
+      if (!alert) throw new Error(`Alert "${alertId}" is not in the current dataset.`);
+      return {
+        requiresAnalystConfirmation: true,
+        alertId,
+        decision,
+        typology: alert.typology,
+        message: 'No disposition was changed. The analyst must apply this proposal in TraceLayer.',
+      };
     },
   });
 

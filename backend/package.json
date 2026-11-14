@@ -7,8 +7,8 @@
     "@tracelayer/aml-engine": "1.0.0"
   },
   "scripts": {
-    "dev": "node --import tsx src/server.ts",
-    "start": "node --import tsx src/server.ts",
+    "dev": "node --env-file-if-exists=../.env.local --import tsx src/server.ts",
+    "start": "node --env-file-if-exists=../.env.local --import tsx src/server.ts",
     "lint": "tsc --noEmit -p tsconfig.json"
   }
 }

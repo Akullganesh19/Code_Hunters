@@ -8,7 +8,7 @@ import {
 } from '../src/detectors';
 import { buildSarCaseDossier, formatDossierMarkdown, sha256Hex } from '../src/dossier';
 import { evaluateTemporalSplit, runCounterexampleSuite } from '../src/evaluation';
-import { generateIbmAmlBenchmark, getDemoTransactions, parseCsvTransactions } from '../src/fixtures';
+import { generateIbmAmlBenchmark, getDemoTransactions, hasGroundTruthLabelColumn, hasValidGroundTruthLabels, parseCsvTransactions } from '../src/fixtures';
 import {
   CLOSING_DISCLAIMER,
   ENTERPRISE_SCREENS,
@@ -17,7 +17,7 @@ import {
   runDetectionPipeline,
   shouldMergeAlerts,
 } from '../src/pipeline';
-import { buildTransactionGraph, ValidationError, validateTransactions } from '../src/schema';
+import { buildTransactionGraph, MAX_TRANSACTIONS_PER_REQUEST, ValidationError, validateTransactions } from '../src/schema';
 import { computePriorityScore } from '../src/scoring';
 import { isMacPlatform, isSearchShortcutEvent, searchDataset } from '../src/search';
 
@@ -63,6 +63,13 @@ test('Bad inputs fail validation cleanly', () => {
       ]),
     ValidationError
   );
+});
+
+test('Transaction requests have bounded row and identifier sizes', () => {
+  assert.throws(() => validateTransactions(new Array(MAX_TRANSACTIONS_PER_REQUEST + 1)), ValidationError);
+  assert.throws(() => validateTransactions([
+    {tx_id: 'T1', sender: 'A'.repeat(257), receiver: 'B', amount: 25, timestamp: '2026-01-01T00:00:00Z'},
+  ]), ValidationError);
 });
 
 test('Parallel edges between same accounts preserve distinct tx_id and timestamp', () => {
@@ -282,6 +289,9 @@ test('CSV parser handles both standard TraceLayer format and IBM HI-Small format
   ].join('\n');
   const parsedStd = parseCsvTransactions(stdCsv);
   assert.equal(parsedStd.length, 2);
+  const parsedBom = parseCsvTransactions(`\uFEFFtx_id,sender,receiver,amount,timestamp,is_laundering\nBOM1,A,B,1,2026-01-01T00:00:00Z,1`);
+  assert.equal(parsedBom[0].tx_id, 'BOM1');
+  assert.equal(parsedBom[0].is_laundering, 1);
 
   const ibmCsv = [
     'Timestamp,From Bank,Account,To Bank,Account.1,Amount Received,Receiving Currency,Amount Paid,Payment Currency,Payment Format,Is Laundering',
@@ -291,6 +301,14 @@ test('CSV parser handles both standard TraceLayer format and IBM HI-Small format
   assert.equal(parsedIbm.length, 1);
   assert.equal(parsedIbm[0].sender, '001_8001A');
   assert.equal(parsedIbm[0].is_laundering, 1);
+});
+
+test('Ground-truth CSV detection distinguishes missing, valid, and malformed labels', () => {
+  assert.equal(hasGroundTruthLabelColumn('tx_id,sender,receiver,amount,timestamp\n1,a,b,10,2026-01-01'), false);
+  assert.equal(hasValidGroundTruthLabels('tx_id,sender,receiver,amount,timestamp,is_laundering\n1,a,b,10,2026-01-01,0\n2,b,c,11,2026-01-02,1'), true);
+  assert.equal(hasValidGroundTruthLabels('\uFEFFtx_id,sender,receiver,amount,timestamp,Is Laundering\n1,a,b,10,2026-01-01,0\n2,b,c,11,2026-01-02,1'), true);
+  assert.equal(hasValidGroundTruthLabels('tx_id,sender,receiver,amount,timestamp,is_laundering\n1,a,b,10,2026-01-01,0\n2,b,c,11,2026-01-02,maybe'), false);
+  assert.equal(hasValidGroundTruthLabels('tx_id,sender,receiver,amount,timestamp,is_laundering\n1,a,b,10,2026-01-01,1\n2,b,c,11,2026-01-02,'), false);
 });
 
 test('Dataset search finds accounts, transaction IDs, and alert IDs across entire dataset', () => {

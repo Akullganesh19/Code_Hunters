@@ -2,39 +2,49 @@
 
 ## Prototype status
 
-The isolated prototype now has a capability registry, in-memory run/event store, workflow runner, five-screen workflow, and localhost HTTP API. The Gemma integration can plan a sequence from registered screen capabilities and execute it through the workflow runner once a fine-tuned adapter is served. A hosted-GPU LoRA pipeline and held-out evaluation are under `upgrades/gemma-agent/`; no trained adapter is checked in. Durable storage, schedules/event triggers, authentication, and a frontend connection remain future work.
+The local app has a model-backed chat agent using the configured OpenAI-compatible provider (Groq or local Ollama) through the AI SDK. The agent has typed tools for all five current screens, can navigate the workspace and open verified alerts, and can propose a Confirmed/Dismissed disposition; the analyst must apply that proposal in the UI. The prior deterministic five-screen workflow remains available.
 
-## Phase 1 — foundations
+The conversational model is configured through an OpenAI-compatible endpoint. The app does not ship or train model weights. An internal service token and durable redacted SQLite workflow summaries are implemented. There is no per-user identity, tenant isolation, durable queue, or complete production audit retention. Do not expose this system or use it with real customer data.
 
-- Replace the in-memory run/event store with persistent records.
-- Add a backend job queue with cancellation, retry limits, and idempotency.
-- Define versioned capability input/output contracts and permission checks.
-- Show run status and evidence consistently in the frontend.
+The transaction CSV remains separate and is not used to train the language model. Agent quality still needs a reviewed instruction/action evaluation set before making production reliability claims.
 
-**Done when:** an analyst can start a run, leave the page, return later, and inspect the same complete run history.
+## Local model
 
-## Phase 2 — read-only workflows
+Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MODEL`, and `AGENT_MODEL_API_KEY`. See `README.md` for setup.
 
-- Overview: validate data, analyze it, and summarize ranked alerts.
-- Investigation: assemble a timeline and bounded graph evidence for a selected alert.
-- Adversarial Lab: run synthetic scenarios and compare detector outcomes.
-- Evaluation: run a reproducible benchmark and flag changed metrics.
+## Phase 1 — capability coverage
 
-**Done when:** every factual statement links to source transactions or a named benchmark result, and re-running the same inputs produces a comparable result.
+- Cover each current screen's important user tasks with bounded, typed agent tools.
+- Add missing data import/validation, detector threshold what-if, dossier validation/export, and benchmark comparison actions.
+- Keep evidence IDs and current screen settings attached to tool outputs.
 
-## Phase 3 — case drafting with review
+**Done when:** each supported task maps to a documented capability, and unsupported tasks return a clear limitation.
 
-- Generate a SAR case draft from selected alerts and evidence.
-- Check required fields and identify unsupported claims.
-- Add an analyst review step before a draft can be marked ready.
+## Phase 2 — reliable state
 
-**Done when:** the agent can prepare a reviewable draft but cannot file it or change an alert disposition.
+- Add cancellation, retry limits, idempotency, and complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
+- Add a job queue with cancellation, retry limits, and idempotency.
+- Version capability input/output contracts and audit tool calls without storing unnecessary transaction contents.
+- Show progress, evidence, and pending analyst actions consistently in the frontend.
 
-## Phase 4 — reliability and operations
+**Done when:** a run survives service restarts and can be inspected later with a complete, access-controlled history.
 
-- Replay historical datasets and synthetic adversarial cases.
-- Track false positives, missed patterns, latency, and agent abstentions.
-- Add per-tenant access control, retention rules, audit export, and production monitoring.
-- Add future screens by registering capabilities and a view adapter, without changing existing workflow definitions.
+## Phase 3 — reviewed instruction examples and agent evaluation
 
-**Done when:** new screens can expose approved agent actions without granting the agent unrestricted access to the interface or data.
+- Keep language-model instruction examples empty until reviewed examples are available.
+- When available, record analyst request, active screen, expected capabilities and arguments, source evidence, expected answer, and whether the correct response is abstention or review.
+- Keep a held-out evaluation set that is not used for prompt tuning.
+
+Measure task success, tool-call validity, evidence coverage, unsupported-claim rate, abstention quality, latency, and cost.
+
+## Phase 4 — identity, privacy, and operations
+
+- Add per-user and per-tenant access control, retention rules, audit export, rate limits, and production monitoring.
+- Add prompt-injection, malformed-input, and permission-boundary evaluations using reviewed cases.
+- Add future screens by registering capabilities and a view adapter, without granting broad host or filesystem access.
+
+**Done when:** each agent action has an authenticated user, tenant scope, evidence trail, and enforceable permission policy.
+
+## Consequential actions
+
+Alert dispositions require an explicit analyst click. Filing a SAR, restricting an account, or communicating externally must remain behind explicit authorization and a production-grade, audited workflow.

@@ -5,10 +5,11 @@ export interface AgentRunStore {
   update(run: AgentRun): Promise<void>;
   appendEvent(event: AgentRunEvent): Promise<void>;
   get(runId: string): Promise<AgentRun | null>;
+  list(limit: number): Promise<AgentRun[]>;
   events(runId: string): Promise<AgentRunEvent[]>;
 }
 
-/** In-memory adapter for local prototyping; replace with a durable store before deployment. */
+/** In-memory adapter for tests; the HTTP service uses the durable SQLite adapter. */
 export class InMemoryAgentRunStore implements AgentRunStore {
   private readonly runs = new Map<string, AgentRun>();
   private readonly runEvents = new Map<string, AgentRunEvent[]>();
@@ -33,6 +34,13 @@ export class InMemoryAgentRunStore implements AgentRunStore {
   async get(runId: string): Promise<AgentRun | null> {
     const run = this.runs.get(runId);
     return run ? structuredClone(run) : null;
+  }
+
+  async list(limit: number): Promise<AgentRun[]> {
+    return [...this.runs.values()]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit)
+      .map((run) => structuredClone(run));
   }
 
   async events(runId: string): Promise<AgentRunEvent[]> {

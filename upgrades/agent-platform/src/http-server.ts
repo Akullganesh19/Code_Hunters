@@ -1,62 +1,107 @@
-import {createServer, type IncomingMessage, type ServerResponse} from 'node:http';
-import {readFile} from 'node:fs/promises';
-import {getDemoTransactions} from '@tracelayer/aml-engine';
+import {createServer, type ServerResponse} from 'node:http';
+import path from 'node:path';
 import {createAmlCapabilityRegistry} from './capabilities/aml-capabilities';
-import {InMemoryAgentRunStore} from './run-store';
+import {redactRun, SqliteAgentRunStore} from './sqlite-run-store';
 import {AgentWorkflowRunner} from './workflow-runner';
 import {fiveScreenReviewWorkflow} from './workflows/five-screen-review';
-import {GemmaTaskAgent} from './gemma-task-agent';
+import {runAgentChat} from './agent-chat';
+import {z} from 'zod';
+import {MAX_TRANSACTIONS_PER_REQUEST, validateTransactions} from '@tracelayer/aml-engine';
+import {
+  configureHttpTimeouts,
+  getInternalToken,
+  readJsonBody,
+  rejectCrossOriginMutation,
+  RequestBodyTooLargeError,
+  requireInternalToken,
+} from '../../../shared/httpSecurity';
 
 const port = Number(process.env.AGENT_PORT ?? 3100);
 const maxBodyBytes = 25 * 1024 * 1024;
+const maxConcurrentAgentRequests = 2;
+const internalToken = getInternalToken();
+let activeAgentRequests = 0;
 const registry = createAmlCapabilityRegistry();
-const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
-runner.registerWorkflow(fiveScreenReviewWorkflow);
-const gemmaTaskAgent = new GemmaTaskAgent(registry, runner);
+let runStore: SqliteAgentRunStore | undefined;
+let runner: AgentWorkflowRunner;
+
+const transactionSchema = z.object({
+  tx_id: z.union([z.string(), z.number()]),
+  sender: z.union([z.string(), z.number()]),
+  receiver: z.union([z.string(), z.number()]),
+  amount: z.union([z.string(), z.number()]),
+  timestamp: z.union([z.string(), z.number()]),
+  is_laundering: z.number().optional(),
+  ring_id: z.string().optional(),
+  typology_label: z.string().optional(),
+});
+
+const optionsSchema = z.object({
+  K: z.number().int().min(2).max(100).optional(),
+  WHours: z.number().min(1).max(720).optional(),
+  cycleWHours: z.number().min(1).max(720).optional(),
+  HMinutes: z.number().min(1).max(1440).optional(),
+  minRetention: z.number().min(0).max(1).optional(),
+}).strict();
+
+const chatRequestSchema = z.object({
+  message: z.string().trim().min(1).max(4_000),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().max(4_000),
+  })).max(10).default([]),
+  transactions: z.array(transactionSchema).max(MAX_TRANSACTIONS_PER_REQUEST),
+  sourceLabel: z.string().max(200).default('current dataset'),
+  hasGroundTruthLabels: z.boolean().default(false),
+  activeScreen: z.enum(['Overview', 'Investigation', 'Adversarial Lab', 'SAR Case Dossier', 'Evaluation']),
+  options: optionsSchema.default({}),
+}).strict();
+
+const runRequestSchema = z.object({
+  workflowId: z.literal('aml.five_screen_review'),
+  startedBy: z.string().trim().max(120).optional(),
+  input: z.object({
+    transactions: z.array(transactionSchema).max(MAX_TRANSACTIONS_PER_REQUEST),
+    sourceLabel: z.string().max(200).optional(),
+    benchmarkRows: z.number().int().min(100).max(25_000).optional(),
+    seed: z.number().int().min(1).max(99_999).optional(),
+  }).strict(),
+}).strict();
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {'content-type': 'application/json; charset=utf-8'});
   response.end(JSON.stringify(body));
 }
 
-function sendHtml(response: ServerResponse, status: number, html: string): void {
-  response.writeHead(status, {'content-type': 'text/html; charset=utf-8'});
-  response.end(html);
-}
-
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    bytes += buffer.length;
-    if (bytes > maxBodyBytes) throw new Error('Request body exceeds the 25 MB limit.');
-    chunks.push(buffer);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-}
-
 const server = createServer(async (request, response) => {
-  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
+  const origin = request.headers.origin;
+  const allowedOrigin = process.env.CORS_ORIGIN ?? 'http://127.0.0.1:3000';
+  if (origin === allowedOrigin) {
+    response.setHeader('access-control-allow-origin', allowedOrigin);
+    response.setHeader('vary', 'Origin');
+  }
 
-  if (request.method === 'GET' && url.pathname === '/') {
-    const page = await readFile(new URL('../console/index.html', import.meta.url), 'utf8');
-    sendHtml(response, 200, page);
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204, {
+      'access-control-allow-methods': 'GET,POST,OPTIONS',
+      'access-control-allow-headers': 'content-type',
+    });
+    response.end();
     return;
   }
+
+  const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
 
   if (request.method === 'GET' && url.pathname === '/api/agent/health') {
     sendJson(response, 200, {status: 'ok', service: 'tracelayer-agent-upgrade'});
     return;
   }
 
+  if (rejectCrossOriginMutation(request, response, allowedOrigin)) return;
+  if (!requireInternalToken(request, response, internalToken)) return;
+
   if (request.method === 'GET' && url.pathname === '/api/agent/capabilities') {
     sendJson(response, 200, {capabilities: registry.list()});
-    return;
-  }
-
-  if (request.method === 'GET' && url.pathname === '/api/agent/demo-input') {
-    sendJson(response, 200, {sourceLabel: 'synthetic demo data', transactions: getDemoTransactions()});
     return;
   }
 
@@ -65,52 +110,77 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/agent/tasks') {
+  if (request.method === 'GET' && url.pathname === '/api/agent/runs') {
+    const rawLimit = url.searchParams.get('limit');
+    const limit = rawLimit === null ? 20 : Number(rawLimit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      sendJson(response, 400, {error: 'Run history limit must be an integer from 1 to 100.'});
+      return;
+    }
+    sendJson(response, 200, {runs: await runner.listRuns(limit)});
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/agent/chat') {
+    if (activeAgentRequests >= maxConcurrentAgentRequests) {
+      response.setHeader('retry-after', '2');
+      sendJson(response, 429, {error: 'Agent capacity is busy. Retry shortly.'});
+      return;
+    }
+    activeAgentRequests++;
     try {
-      const body = await readJson(request);
-      if (!body || typeof body !== 'object' || !('task' in body)) {
-        sendJson(response, 400, {error: 'Expected a task string and optional input fields.'});
+      const parsed = chatRequestSchema.safeParse(await readJsonBody(request, maxBodyBytes));
+      if (!parsed.success) {
+        sendJson(response, 400, {error: parsed.error.issues[0]?.message ?? 'Invalid agent chat request.'});
         return;
       }
-      const payload = body as {task: unknown; input?: unknown; startedBy?: string};
-      if (typeof payload.task !== 'string' || !payload.task.trim()) {
-        sendJson(response, 400, {error: 'Task must be a non-empty string.'});
-        return;
-      }
-      const result = await gemmaTaskAgent.run(
-        payload.task,
-        payload.input ?? {},
-        payload.startedBy?.trim() || 'local-user'
-      );
-      const status = result.run.status === 'failed' ? 422 : result.run.status === 'needs_review' ? 202 : 201;
-      sendJson(response, status, result);
+      const result = await runAgentChat(parsed.data);
+      sendJson(response, 200, result);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not run the Gemma agent task.';
-      const status = message.includes('Gemma service unavailable') ? 503 : 400;
-      sendJson(response, status, {error: message});
+      console.error(`[agent-chat] ${error instanceof Error ? error.name : 'Error'}`);
+      const status = error instanceof RequestBodyTooLargeError ? 413 : error instanceof SyntaxError ? 400 : 502;
+      sendJson(response, status, {
+        error: status === 413
+          ? 'Request body exceeds the 25 MB limit.'
+          : status === 400
+            ? 'Invalid JSON request body.'
+          : 'The agent model could not respond. Check that Ollama is running with the configured model, or configure a reachable OpenAI-compatible Hugging Face endpoint.',
+      });
+    } finally {
+      activeAgentRequests--;
     }
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/agent/runs') {
+    if (activeAgentRequests >= maxConcurrentAgentRequests) {
+      response.setHeader('retry-after', '2');
+      sendJson(response, 429, {error: 'Agent capacity is busy. Retry shortly.'});
+      return;
+    }
+    activeAgentRequests++;
     try {
-      const body = await readJson(request);
-      if (!body || typeof body !== 'object' || !('workflowId' in body) || !('input' in body)) {
-        sendJson(response, 400, {error: 'Expected workflowId and input fields.'});
+      const parsed = runRequestSchema.safeParse(await readJsonBody(request, maxBodyBytes));
+      if (!parsed.success) {
+        sendJson(response, 400, {error: parsed.error.issues[0]?.message ?? 'Invalid workflow request.'});
         return;
       }
 
-      const payload = body as {workflowId: string; input: unknown; startedBy?: string};
+      const payload = parsed.data;
+      validateTransactions(payload.input.transactions);
       const run = await runner.start(
         payload.workflowId,
         payload.input,
         payload.startedBy?.trim() || 'local-user'
       );
       const status = run.status === 'failed' ? 422 : run.status === 'needs_review' ? 202 : 201;
-      sendJson(response, status, {run, events: await runner.getRunEvents(run.id)});
+      sendJson(response, status, {run: redactRun(run), events: await runner.getRunEvents(run.id)});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not start workflow.';
-      sendJson(response, message.includes('25 MB limit') ? 413 : 400, {error: message});
+      const status = error instanceof RequestBodyTooLargeError ? 413 : error instanceof SyntaxError ? 400 : 422;
+      sendJson(response, status, {error: status === 413 ? 'Request body exceeds the 25 MB limit.' : status === 400 ? 'Invalid JSON request body.' : message});
+    } finally {
+      activeAgentRequests--;
     }
     return;
   }
@@ -130,6 +200,36 @@ const server = createServer(async (request, response) => {
   sendJson(response, 404, {error: 'Route not found.'});
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`TraceLayer agent upgrade listening on http://127.0.0.1:${port}`);
+configureHttpTimeouts(server);
+
+async function startServer(): Promise<void> {
+  const databasePath = path.resolve(process.env.AGENT_RUNS_DB_PATH ?? '../../data/agent-runs.sqlite');
+  const retentionLimit = Number(process.env.AGENT_RUN_RETENTION_COUNT ?? 1_000);
+  runStore = await SqliteAgentRunStore.open(databasePath, retentionLimit);
+  runner = new AgentWorkflowRunner(registry, runStore);
+  runner.registerWorkflow(fiveScreenReviewWorkflow);
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`TraceLayer agent upgrade listening on http://127.0.0.1:${port}`);
+  });
+}
+
+async function shutdown(): Promise<void> {
+  if (!server.listening) {
+    await runStore?.close();
+    return;
+  }
+  server.close(() => {
+    void runStore?.close().catch((error: unknown) => {
+      console.error(`[agent-store] close failed: ${error instanceof Error ? error.name : 'Error'}`);
+      process.exitCode = 1;
+    });
+  });
+}
+
+process.once('SIGINT', () => { void shutdown(); });
+process.once('SIGTERM', () => { void shutdown(); });
+
+void startServer().catch((error: unknown) => {
+  console.error(`[agent-startup] ${error instanceof Error ? error.message : 'Could not initialize the agent service.'}`);
+  process.exitCode = 1;
 });

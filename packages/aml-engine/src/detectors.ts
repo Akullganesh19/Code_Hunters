@@ -209,12 +209,18 @@ export function detectFanInFanOut(
     counter++;
     const maxBurstRatio = Math.max(...findings.map((f) => f.burstRatio));
     const dirsLabel = findings.map((f) => f.direction).join('/');
+    const typology =
+      findings.length > 1
+        ? 'Fan-in/Fan-out'
+        : findings[0].direction === 'fan_in'
+          ? 'Fan-in'
+          : 'Fan-out';
 
     alerts.push(
       attachRiskScores(
         {
           alert_id: `ALT_FI_${String(counter).padStart(4, '0')}`,
-          typology: 'Fan-in/Fan-out',
+          typology,
           accounts,
           tx_ids: txIds,
           start_time: tStart.timestamp,

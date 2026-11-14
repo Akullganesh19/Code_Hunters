@@ -9,13 +9,14 @@ import {
 import {
   BENCHMARK_SOURCE_LABEL,
   generateIbmAmlBenchmark,
+  hasValidGroundTruthLabels,
   parseCsvTransactions,
 } from '@tracelayer/aml-engine';
 
 export function EvaluationScreen() {
   const [splitRatio, setSplitRatio] = useState<number>(0.7);
   const [seed, setSeed] = useState<number>(42);
-  const [benchmarkRows, setBenchmarkRows] = useState<number>(15000);
+  const [benchmarkRows, setBenchmarkRows] = useState<number>(12000);
   const [customCsvName, setCustomCsvName] = useState<string | null>(null);
   const [customCsvText, setCustomCsvText] = useState<string | null>(null);
   const [report, setReport] = useState<EvaluationReport>(() => {
@@ -30,9 +31,20 @@ export function EvaluationScreen() {
   const handleRunEvaluation = () => {
     try {
       setError(null);
-      const edges = customCsvText
-        ? parseCsvTransactions(customCsvText, benchmarkRows)
-        : generateIbmAmlBenchmark(benchmarkRows, seed);
+      let edges: ReturnType<typeof parseCsvTransactions>;
+      if (customCsvText) {
+        if (!hasValidGroundTruthLabels(customCsvText)) {
+          throw new Error('This CSV needs an is_laundering column with a 0 or 1 label on every row.');
+        }
+        edges = parseCsvTransactions(customCsvText, benchmarkRows);
+        const hasPositive = edges.some((edge) => edge.is_laundering === 1);
+        const hasNegative = edges.some((edge) => edge.is_laundering === 0);
+        if (!hasPositive || !hasNegative) {
+          throw new Error('The selected CSV sample must contain both laundering and non-laundering labels. Increase the row cap or choose a more representative sample.');
+        }
+      } else {
+        edges = generateIbmAmlBenchmark(benchmarkRows, seed);
+      }
       const rep = evaluateTemporalSplit(edges, {
         splitRatio,
         seed,
@@ -50,8 +62,15 @@ export function EvaluationScreen() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
+        if (!hasValidGroundTruthLabels(reader.result)) {
+          setCustomCsvText(null);
+          setCustomCsvName(null);
+          setError('This CSV needs an is_laundering column with a 0 or 1 label on every row. The built-in synthetic benchmark remains available.');
+          return;
+        }
         setCustomCsvText(reader.result);
         setCustomCsvName(file.name);
+        setError(null);
       }
     };
     reader.readAsText(file);
@@ -71,7 +90,7 @@ export function EvaluationScreen() {
               </h3>
             </div>
             <p className="mt-0.5 text-xs text-[#93a199]">
-              Strictly separated from demo data. Tunes T, graph parameters, and XGBoost risk model
+              Uses this screen’s built-in labeled benchmark unless a labeled CSV is uploaded. Tunes T, graph parameters, and XGBoost risk model
               on first {(splitRatio * 100).toFixed(0)}% of timeline; reports exclusively on held-out remainder.
             </p>
           </div>
@@ -83,7 +102,7 @@ export function EvaluationScreen() {
               accept=".csv"
               onChange={handleUploadBenchmark}
               className="hidden"
-              aria-label="Upload IBM AML HI-Small CSV"
+              aria-label="Upload labeled transaction CSV"
             />
             <button
               type="button"
@@ -91,7 +110,7 @@ export function EvaluationScreen() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-[#f3f5f4] hover:bg-white/10 whitespace-nowrap"
             >
               <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-              {customCsvName ? `CSV: ${customCsvName}` : 'Upload IBM HI-Small CSV'}
+              {customCsvName ? `CSV: ${customCsvName}` : 'Upload labeled CSV'}
             </button>
             <button
               type="button"

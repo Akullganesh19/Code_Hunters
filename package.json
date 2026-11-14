@@ -6,20 +6,27 @@
   "workspaces": [
     "frontend",
     "backend",
-    "packages/aml-engine"
+    "packages/aml-engine",
+    "upgrades/agent-platform"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:frontend": "npm run dev --workspace @tracelayer/frontend",
     "dev:backend": "npm run dev --workspace @tracelayer/backend",
     "build": "npm run build --workspace @tracelayer/frontend",
-    "lint": "npm run lint --workspace @tracelayer/frontend && npm run lint --workspace @tracelayer/backend && npm run lint --workspace @tracelayer/aml-engine",
-    "test": "node --import tsx --test packages/aml-engine/tests/*.test.ts",
+    "lint": "npm run lint --workspace @tracelayer/frontend && npm run lint --workspace @tracelayer/backend && npm run lint --workspace @tracelayer/aml-engine && npm run lint --workspace tracelayer-agent-platform-upgrade",
+    "test": "node --import tsx --test packages/aml-engine/tests/*.test.ts upgrades/agent-platform/tests/*.test.ts",
     "clean": "npm run clean --workspace @tracelayer/frontend"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

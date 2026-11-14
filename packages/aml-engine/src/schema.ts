@@ -75,10 +75,22 @@ export class ValidationError extends Error {
 }
 
 export const REQUIRED_COLUMNS = ['tx_id', 'sender', 'receiver', 'amount', 'timestamp'] as const;
+export const MAX_TRANSACTIONS_PER_REQUEST = 50_000;
+
+const FIELD_LENGTH_LIMITS: Record<(typeof REQUIRED_COLUMNS)[number], number> = {
+  tx_id: 256,
+  sender: 256,
+  receiver: 256,
+  amount: 64,
+  timestamp: 64,
+};
 
 export function validateTransactions(rows: RawTransactionInput[]): TransactionEdge[] {
   if (!Array.isArray(rows)) {
     throw new ValidationError('Input transactions must be an array.');
+  }
+  if (rows.length > MAX_TRANSACTIONS_PER_REQUEST) {
+    throw new ValidationError(`At most ${MAX_TRANSACTIONS_PER_REQUEST.toLocaleString('en-US')} transactions are allowed per request.`);
   }
   if (rows.length === 0) {
     return [];
@@ -97,6 +109,19 @@ export function validateTransactions(rows: RawTransactionInput[]): TransactionEd
       const val = r[col];
       if (val === undefined || val === null || String(val).trim() === '') {
         throw new ValidationError(`Missing or empty required field "${col}" at row ${i}.`);
+      }
+      if (typeof val !== 'string' && typeof val !== 'number') {
+        throw new ValidationError(`Invalid value for "${col}" at row ${i}.`);
+      }
+      if (String(val).length > FIELD_LENGTH_LIMITS[col]) {
+        throw new ValidationError(`Field "${col}" exceeds ${FIELD_LENGTH_LIMITS[col]} characters at row ${i}.`);
+      }
+    }
+
+    for (const [field, maxLength] of [['ring_id', 128], ['typology_label', 128]] as const) {
+      const value = r[field];
+      if (value !== undefined && (typeof value !== 'string' || value.length > maxLength)) {
+        throw new ValidationError(`Field "${field}" must be text no longer than ${maxLength} characters at row ${i}.`);
       }
     }
 

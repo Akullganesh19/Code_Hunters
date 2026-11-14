@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Check, Database, Upload, X } from 'lucide-react';
 import type { Alert, TransactionEdge, SearchResultItem } from '@tracelayer/aml-engine';
 import { TransactionGraph3D } from './TransactionGraph3D';
@@ -29,6 +29,19 @@ export function OverviewScreen({
   onInspectAlert,
 }: OverviewScreenProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showAlertedOnly, setShowAlertedOnly] = useState(true);
+
+  useEffect(() => {
+    setShowAlertedOnly(true);
+  }, [sourceLabel]);
+
+  const alertTransactionIds = useMemo(
+    () => new Set(alerts.flatMap((alert) => alert.tx_ids)),
+    [alerts]
+  );
+  const graphEdges = showAlertedOnly
+    ? edges.filter((edge) => alertTransactionIds.has(edge.tx_id))
+    : edges;
 
   const uniqueAccounts = new Set<string>();
   let totalVolume = 0;
@@ -42,21 +55,28 @@ export function OverviewScreen({
 
   // Typology distribution counts across generated alerts
   const typologyCounts = {
-    fan: alerts.filter((a) => a.typology.includes('Fan-in/Fan-out')).length,
+    fanIn: alerts.filter((a) => String(a.evidence.direction ?? '').includes('fan_in')).length,
+    fanOut: alerts.filter((a) => String(a.evidence.direction ?? '').includes('fan_out')).length,
     cycle: alerts.filter((a) => a.typology.includes('Chronological Cycle')).length,
     passthrough: alerts.filter((a) => a.typology.includes('Rapid Pass-through')).length,
   };
   const totalPatternHits = Math.max(
     1,
-    typologyCounts.fan + typologyCounts.cycle + typologyCounts.passthrough
+    typologyCounts.fanIn + typologyCounts.fanOut + typologyCounts.cycle + typologyCounts.passthrough
   );
 
   const rings = [
     {
-      label: 'Fan-in / Fan-out',
-      count: typologyCounts.fan,
-      pct: Math.round((typologyCounts.fan / totalPatternHits) * 100),
+      label: 'Fan-in',
+      count: typologyCounts.fanIn,
+      pct: Math.round((typologyCounts.fanIn / totalPatternHits) * 100),
       stroke: '#8b5cf6',
+    },
+    {
+      label: 'Fan-out',
+      count: typologyCounts.fanOut,
+      pct: Math.round((typologyCounts.fanOut / totalPatternHits) * 100),
+      stroke: '#a78bfa',
     },
     {
       label: 'Chronological Cycle',
@@ -105,6 +125,14 @@ export function OverviewScreen({
             Load Synthetic Demo Data
           </button>
 
+          <button
+            type="button"
+            onClick={() => setShowAlertedOnly((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/12 bg-white/5 px-3.5 py-2 text-xs font-medium text-[#f3f5f4] transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-violet-500 whitespace-nowrap"
+          >
+            {showAlertedOnly ? 'Show All Transactions' : 'Show Alerted Only'}
+          </button>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -123,6 +151,12 @@ export function OverviewScreen({
           </button>
         </div>
       </div>
+
+      <p className="px-1 text-[11px] text-[#93a199]" role="status">
+        Graph view: {graphEdges.length.toLocaleString('en-US')} alerted transactions shown
+        {showAlertedOnly ? ` of ${edges.length.toLocaleString('en-US')} uploaded` : ''}.
+        Detection always runs against the full uploaded dataset.
+      </p>
 
       {validationError && (
         <div
@@ -250,11 +284,11 @@ export function OverviewScreen({
             const focusedEdges =
               focusedEntity && !focusedEntity.linkedAlertId
                 ? focusedEntity.kind === 'account'
-                  ? edges.filter(
+                  ? graphEdges.filter(
                       (e) => e.sender === focusedEntity.id || e.receiver === focusedEntity.id
                     )
-                  : edges.filter((e) => e.tx_id === focusedEntity.id)
-                : edges;
+                  : graphEdges.filter((e) => e.tx_id === focusedEntity.id)
+                : graphEdges;
             const focusedHighlightAccounts =
               focusedEntity && !focusedEntity.linkedAlertId
                 ? new Set(focusedEdges.flatMap((e) => [e.sender, e.receiver]))
@@ -266,7 +300,7 @@ export function OverviewScreen({
 
             return (
               <TransactionGraph3D
-                edges={focusedEdges.length > 0 ? focusedEdges : edges}
+                edges={focusedEntity && !focusedEntity.linkedAlertId ? focusedEdges : graphEdges}
                 highlightedAlert={
                   focusedEntity && !focusedEntity.linkedAlertId ? null : alerts[0] ?? null
                 }

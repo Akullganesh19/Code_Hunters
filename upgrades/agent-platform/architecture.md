@@ -2,24 +2,24 @@
 
 ## Goal
 
-Build one background agent service that can run approved workflows across current and future TraceLayer screens. The agent works through backend capabilities and structured workflow steps. It does not click buttons, inspect browser elements, or depend on screen-specific prompts.
+Build one agent service that can answer analyst requests across every current and future TraceLayer screen. The model chooses from typed backend capabilities; it does not click buttons, inspect browser elements, or receive unrestricted host access.
 
 ## Components
 
 ```text
-Frontend screens
-      │ start / view runs
-      ▼
-Agent API ── Run coordinator ── Capability registry
-                    │                    │
-                    ▼                    ├── AML engine
-              Run history               ├── Dataset services
-                    │                    └── Screen workflows
-                    ▼
-             Analyst review
+Frontend screens ── chat / start / review
+       │
+       ▼
+Agent API ── Model planner ── Capability registry ── AML engine
+    │                             │                    Dataset services
+    └── Run coordinator ── Run history                 Screen capabilities
+                                  │
+                                  ▼
+                           Analyst review
 ```
 
 - **Run coordinator:** starts, resumes, cancels, and retries workflow runs.
+- **Model planner:** uses the configured OpenAI-compatible language model to choose from registered TraceLayer tools.
 - **Capability registry:** exposes typed backend actions with access rules, timeouts, and input limits.
 - **Workflow definitions:** order capabilities into bounded tasks, define checkpoints, and state when analyst review is required.
 - **Run history:** records the trigger, inputs, capability calls, evidence references, model output, and final status.
@@ -41,7 +41,7 @@ Adding a future screen means adding its capability definitions and UI adapter. E
 
 - Keep detection, scoring, and validation deterministic in the AML engine.
 - Treat model output as a suggestion; include source transaction IDs for factual claims.
-- Start with read-only access and draft-only writes.
-- Require analyst approval for alert disposition, SAR filing, account restrictions, or external communication.
+- Give the model access to all registered TraceLayer capabilities, with input validation and permission checks at the server boundary.
+- Require an explicit analyst action to apply a proposed alert disposition. SAR filing, account restrictions, and external communication remain outside the agent's tool set.
 - Stop and request review when evidence is missing, contradictory, or outside the workflow's scope.
-- Keep credentials and customer data out of prompts, logs, and capability responses unless a workflow explicitly needs them.
+- Keep credentials out of prompts, logs, and capability responses. Keep the local model as the default for sensitive data; explicitly review data handling before configuring a remote model endpoint.

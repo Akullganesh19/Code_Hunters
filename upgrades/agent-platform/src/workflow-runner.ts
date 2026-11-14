@@ -34,10 +34,6 @@ export class AgentWorkflowRunner {
     this.workflows.set(workflow.id, workflow);
   }
 
-  unregisterWorkflow(workflowId: string): void {
-    this.workflows.delete(workflowId);
-  }
-
   listWorkflows(): Array<Pick<WorkflowDefinition, 'id' | 'name' | 'description'>> {
     return [...this.workflows.values()].map(({id, name, description}) => ({id, name, description}));
   }
@@ -126,6 +122,10 @@ export class AgentWorkflowRunner {
 
   getRun(runId: string): Promise<AgentRun | null> {
     return this.store.get(runId);
+  }
+
+  listRuns(limit: number): Promise<AgentRun[]> {
+    return this.store.list(limit);
   }
 
   getRunEvents(runId: string): Promise<AgentRunEvent[]> {

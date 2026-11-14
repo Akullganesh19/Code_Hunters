@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   Activity,
   BarChart3,
+  Bot,
   FileText,
   FlaskConical,
   Home,
@@ -15,9 +16,11 @@ import { OverviewScreen } from './components/OverviewScreen';
 import { ParticleWaveCanvas } from './components/ParticleWaveCanvas';
 import { SarDossierScreen } from './components/SarDossierScreen';
 import { SidebarSearch } from './components/SidebarSearch';
+import { AgentPanel } from './components/AgentPanel';
 import {
   DEMO_SOURCE_LABEL,
   getDemoTransactions,
+  hasValidGroundTruthLabels,
   parseCsvTransactions,
 } from '@tracelayer/aml-engine';
 import {
@@ -35,10 +38,12 @@ const SCREEN_ICONS: Record<ScreenId, typeof Home> = {
   Evaluation: BarChart3,
 };
 
-export default function App() {
+function TraceLayerApp() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('Overview');
+  const [agentOpen, setAgentOpen] = useState(false);
   const [edges, setEdges] = useState<TransactionEdge[]>(() => getDemoTransactions());
   const [sourceLabel, setSourceLabel] = useState<string>(DEMO_SOURCE_LABEL);
+  const [hasGroundTruthLabels, setHasGroundTruthLabels] = useState(true);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [focusedEntity, setFocusedEntity] = useState<SearchResultItem | null>(null);
@@ -87,6 +92,7 @@ export default function App() {
     setValidationError(null);
     setEdges(getDemoTransactions());
     setSourceLabel(DEMO_SOURCE_LABEL);
+    setHasGroundTruthLabels(true);
     setDecisions({});
     setSelectedAlertId(null);
     setFocusedEntity(null);
@@ -98,6 +104,7 @@ export default function App() {
       const parsed = parseCsvTransactions(csvText);
       setEdges(parsed);
       setSourceLabel(`uploaded CSV: ${fileName}`);
+      setHasGroundTruthLabels(hasValidGroundTruthLabels(csvText));
       setValidationError(null);
       setDecisions({});
       setSelectedAlertId(null);
@@ -304,7 +311,10 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-[#93a199]">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[#93a199]">
+            <button type="button" onClick={() => setAgentOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/20 focus-visible:outline-2 focus-visible:outline-violet-400">
+              <Bot className="h-4 w-4" aria-hidden="true" /> Open agent
+            </button>
             <span className="font-mono tabular-nums">
               {Object.values(decisions).filter((d) => d === 'Confirmed').length} confirmed
             </span>
@@ -375,6 +385,26 @@ export default function App() {
 
         {activeScreen === 'Evaluation' && <EvaluationScreen />}
       </main>
+      {agentOpen && <AgentPanel
+        edges={pipelineResult.edges}
+        sourceLabel={sourceLabel}
+        hasGroundTruthLabels={hasGroundTruthLabels}
+        activeScreen={activeScreen}
+        options={{K: kMin, WHours: wHours, HMinutes: hMinutes, minRetention}}
+        onSetDecision={handleSetDecision}
+        onNavigate={(screen, alertId) => {
+          if (alertId) {
+            setSelectedAlertId(alertId);
+            setFocusedTxId(null);
+          }
+          setActiveScreen(screen);
+        }}
+        onClose={() => setAgentOpen(false)}
+      />}
     </div>
   );
+}
+
+export default function App() {
+  return <TraceLayerApp />;
 }

@@ -3,6 +3,26 @@ import { validateTransactions, type RawTransactionInput, type TransactionEdge } 
 export const DEMO_SOURCE_LABEL = 'synthetic demo data';
 export const BENCHMARK_SOURCE_LABEL = 'synthetic benchmark, IBM AMLworld';
 
+export function hasGroundTruthLabelColumn(csvText: string): boolean {
+  const firstLine = csvText.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] ?? '';
+  const headers = splitCsvLine(firstLine).map((header) => header.toLowerCase().trim());
+  return headers.includes('is_laundering') || headers.includes('is laundering');
+}
+
+export function hasValidGroundTruthLabels(csvText: string): boolean {
+  const lines = csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return false;
+  const headers = splitCsvLine(lines[0]).map((header) => header.toLowerCase().trim());
+  const labelIndex = headers.indexOf('is_laundering') >= 0
+    ? headers.indexOf('is_laundering')
+    : headers.indexOf('is laundering');
+  if (labelIndex < 0) return false;
+  return lines.slice(1).every((line) => {
+    const label = splitCsvLine(line)[labelIndex]?.trim();
+    return label === '0' || label === '1';
+  });
+}
+
 export function getDemoTransactions(): TransactionEdge[] {
   const baseMs = Date.parse('2026-03-10T08:00:00.000Z');
   const rows: RawTransactionInput[] = [];
@@ -273,6 +293,7 @@ export function generateIbmAmlBenchmark(nRows = 25000, seed = 42): TransactionEd
  */
 export function parseCsvTransactions(csvText: string, maxRows = 150000): TransactionEdge[] {
   const lines = csvText
+    .replace(/^\uFEFF/, '')
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0);

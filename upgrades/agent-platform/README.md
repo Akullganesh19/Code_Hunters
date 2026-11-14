@@ -1,42 +1,49 @@
-# Agent platform prototype
+# TraceLayer agent platform
 
-This is an isolated prototype. It uses the current shared AML engine but does not change or connect to the judge/demo app.
+The local TraceLayer agent is a model-backed analyst copilot with typed tools for every current product screen. Its model plans and explains; the deterministic AML engine computes findings, scores, graph evidence, and case drafts.
 
-## What works now
+## Hugging Face model guidance
 
-- A capability registry with explicit screen ownership and `read`, `draft`, or `write` permission levels.
-- A workflow runner that records run and step events, rejects unknown capabilities, and stops before any `write` action.
-- A five-screen workflow for overview analysis, investigation evidence, adversarial testing, SAR draft generation, and benchmark evaluation.
-- A Gemma task endpoint that validates JSON tool calls, maps them to registered screen capabilities, and adds prerequisite analysis where needed.
-- A standalone console at `http://127.0.0.1:3100/`, with synthetic data loading, an AI-task button, and a deterministic workflow button.
-- An HTTP API for listing capabilities/workflows, starting runs, and reading run history.
+The Hugging Face skills and CLI guidance are installed under the repository's `.agents/skills/` folder. Use the model browser and model cards to compare instruction models by tool-calling support, license, task, context, quantization, runtime requirements, and available inference providers. Do not download the whole Hub; it contains far more models than this machine can run.
 
-The Gemma fine-tuning pipeline is in `upgrades/gemma-agent/`. Until a trained adapter is loaded by its local model server, `POST /api/agent/tasks` returns `503`; the deterministic five-screen workflow remains runnable without the model. Draft actions stop at analyst review and write-level actions are never exposed to the model.
+Choose a model based on tool-calling reliability, license, context size, runtime, privacy, and cost. The app does not download or fine-tune model weights. It calls a model through the OpenAI-compatible provider configured below.
 
-## Run it locally
+## Configure the provider
 
-From the repository root, install dependencies if needed, then run:
+The model adapter uses an OpenAI-compatible endpoint. To use Groq, create a root `.env.local` file with:
+
+```dotenv
+AGENT_MODEL_BASE_URL=https://api.groq.com/openai/v1
+AGENT_MODEL=openai/gpt-oss-120b
+AGENT_MODEL_API_KEY=your-groq-key
+```
+
+`.env.local` is git-ignored and loaded by the agent's development and start scripts. Cloud inference receives the analyst's message and tool results selected during the run, which can include account IDs, transaction IDs, amounts, and timestamps. Use only with data approved for the configured provider. Never commit API keys.
+
+## Current capabilities
+
+| Screen | Agent actions |
+| --- | --- |
+| Overview | Analyze with active detector thresholds; search alerts, accounts, and transactions |
+| Workspace | Navigate to any screen; open a verified alert directly in Investigation |
+| Investigation | Inspect alert graph evidence; look up transactions; summarize account activity; propose Confirmed/Dismissed dispositions |
+| Adversarial Lab | Run bounded synthetic scenarios against a sandbox copy of the current dataset |
+| SAR Case Dossier | Draft and return an evidence-linked dossier for analyst review |
+| Evaluation | Evaluate the active dataset only when every row has a binary label and the capped sample contains both classes; run the reproducible synthetic benchmark |
+
+The agent can also run the existing five-screen workflow and navigate to a selected screen or verified alert. It cannot read files outside TraceLayer or operate the host computer. Disposition proposals require an analyst click. SAR drafts are never filed. Account restrictions, external messages, and filing are not agent capabilities.
+
+## Run locally
+
+From the repository root, start the whole app and agent service with `npm run dev`, or start only the agent service with:
 
 ```sh
 npm --prefix upgrades/agent-platform run dev
 ```
 
-The service binds to `127.0.0.1:3100` by default. Set `AGENT_PORT` to use a different local port.
+The agent service binds to `127.0.0.1:3100` by default. `GET /api/agent/health`, `GET /api/agent/capabilities`, and `GET /api/agent/workflows` expose local service status and registered tools. `POST /api/agent/chat` accepts the current analyst message, recent chat history, active dataset, screen, and detector thresholds. Existing `/api/agent/runs` routes start the deterministic five-screen workflow.
 
-## Endpoints
-
-- `GET /api/agent/health`
-- `GET /api/agent/capabilities`
-- `GET /api/agent/workflows`
-- `GET /api/agent/demo-input` (synthetic fixture transactions)
-- `POST /api/agent/tasks` with `{ "task": "...", "input": { "transactions": [...] } }`
-- `POST /api/agent/runs` with `{ "workflowId": "aml.five_screen_review", "input": { "transactions": [...] }, "startedBy": "analyst-id" }`
-- `GET /api/agent/runs/:runId`
-- `GET /api/agent/runs/:runId/events`
-
-Starting the five-screen workflow runs all five registered capabilities in order. The SAR dossier output pauses at `needs_review`. Write-level capabilities are stopped before execution.
-
-Runs are held in memory and disappear when the process stops. The console and APIs are for local development with synthetic data, not production use.
+The app opens directly without a TraceLayer login screen. The API and agent require an internal service token in production and bind to loopback; use a trusted identity-aware gateway for any network deployment. Workflow runs and status events persist in `data/agent-runs.sqlite` by default (override with `AGENT_RUNS_DB_PATH`); stored outputs are redacted summaries, and interrupted runs are marked failed at startup. Retention defaults to 1,000 runs and can be changed with `AGENT_RUN_RETENTION_COUNT`. Chat transcripts and full evidence outputs are not persisted. Do not expose the app publicly without gateway authentication, tenant isolation, complete audit records, retention policy, and production operations controls.
 
 ## Checks
 

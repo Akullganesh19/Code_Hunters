@@ -62,7 +62,7 @@ export function formatExplanation(alert: Alert): string {
 
   let body: string;
 
-  if (typ === 'Fan-in/Fan-out') {
+  if (typ === 'Fan-in/Fan-out' || typ === 'Fan-in' || typ === 'Fan-out') {
     body =
       `Typology: ${typ}. Hub account ${ev.hub_account} transacted across ` +
       `${ev.distinct_counterparties} distinct counterparties in ${nTx} transactions ` +

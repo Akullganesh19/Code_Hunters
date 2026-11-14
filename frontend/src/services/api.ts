@@ -15,6 +15,7 @@ export async function analyzeTransactions(
 ): Promise<AnalysisResponse> {
   const response = await fetch(`${apiBaseUrl}/api/analyze`, {
     method: 'POST',
+    credentials: 'same-origin',
     headers: {'content-type': 'application/json'},
     body: JSON.stringify({transactions, options}),
   });
