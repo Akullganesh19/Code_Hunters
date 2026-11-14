@@ -84,3 +84,24 @@ test('evaluation can run without a loaded transaction dataset', async () => {
   assert.equal(result.run.status, 'completed');
   assert.deepEqual(result.run.completedSteps, ['evaluation']);
 });
+
+test('model arguments are JSON parsed, range checked, and passed to the capability', async () => {
+  const registry = createAmlCapabilityRegistry();
+  const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
+  runner.registerWorkflow(fiveScreenReviewWorkflow);
+  const agent = new GemmaTaskAgent(
+    registry,
+    runner,
+    undefined,
+    mockModelFetch(
+      '<|tool_call>call:adversarial.run_scenario{"config":{"typology":"Rapid Pass-through","hopCount":3,"retentionRatio":0.8,"hopDelayMinutes":20,"amountPerTx":2500,"wrongTimeOrder":false},"baselineThreshold":10000}<tool_call|>'
+    )
+  );
+  const result = await agent.run(
+    'Run a three-hop rapid pass-through test.',
+    {transactions: getDemoTransactions()},
+    'test-analyst'
+  );
+  assert.deepEqual(result.run.completedSteps, ['overview', 'adversarial_lab']);
+  assert.equal((result.run.outputs.adversarial_lab as {totalInjected: number}).totalInjected, 3);
+});
