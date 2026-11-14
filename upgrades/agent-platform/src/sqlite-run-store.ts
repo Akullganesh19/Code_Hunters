@@ -49,7 +49,7 @@ function redactRun(run: AgentRun): AgentRun {
 
   return {
     ...run,
-    startedBy: 'authenticated-user',
+    startedBy: 'unattributed-local-session',
     outputs,
     ...(run.error ? {
       error: run.error.includes('agent service restarted before this workflow finished')

@@ -46,7 +46,7 @@ test('SQLite run history survives restart without persisting transaction content
     const persistedRun = await reopened.get(run.id);
     assert.ok(persistedRun);
     assert.equal(persistedRun.status, 'needs_review');
-    assert.equal(persistedRun.startedBy, 'authenticated-user');
+    assert.equal(persistedRun.startedBy, 'unattributed-local-session');
     assert.deepEqual(persistedRun.outputs.overview, {
       redacted: true,
       transactionCount: 1,
@@ -66,7 +66,7 @@ test('SQLite run history survives restart without persisting transaction content
     assert.deepEqual(await reopened.events(run.id), [event]);
 
     const databaseText = await readFile(databasePath, 'utf8');
-    for (const secret of ['private-transaction-id', 'private-account-id', 'private-alert-id', 'private case narrative']) {
+    for (const secret of ['analyst-claimed-by-client', 'private-transaction-id', 'private-account-id', 'private-alert-id', 'private case narrative']) {
       assert.equal(databaseText.includes(secret), false);
     }
     await reopened.close();

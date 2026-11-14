@@ -79,7 +79,6 @@ export async function startFiveScreenReview(
     headers: {'content-type': 'application/json'},
     body: JSON.stringify({
       workflowId: 'aml.five_screen_review',
-      startedBy: 'local-analyst',
       input: {transactions, sourceLabel, benchmarkRows: 400},
     }),
   });

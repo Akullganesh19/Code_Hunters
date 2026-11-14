@@ -70,7 +70,7 @@ npm test
 npm run build
 ```
 
-The bundled sample transactions are synthetic. Alerts are investigation cues for human review, not findings of wrongdoing. The agent keeps durable, redacted SQLite workflow summaries and recovers interrupted runs, but TraceLayer does not provide user identity, per-user or tenant isolation, or a complete audit record. Do not expose it publicly without gateway authentication and the remaining production operations controls.
+The bundled sample transactions are synthetic. Alerts are investigation cues for human review, not findings of wrongdoing. The agent keeps durable, redacted SQLite workflow summaries and recovers interrupted runs. Runs are labeled `unattributed-local-session`; this is not a verified user identity or a complete audit record. TraceLayer does not provide per-user or tenant isolation. Do not expose it publicly without gateway authentication and the remaining production operations controls.
 
 ## Local AML research database
 

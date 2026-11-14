@@ -60,7 +60,6 @@ const chatRequestSchema = z.object({
 
 const runRequestSchema = z.object({
   workflowId: z.literal('aml.five_screen_review'),
-  startedBy: z.string().trim().max(120).optional(),
   input: z.object({
     transactions: z.array(transactionSchema).max(MAX_TRANSACTIONS_PER_REQUEST),
     sourceLabel: z.string().max(200).optional(),
@@ -181,7 +180,7 @@ const server = createServer(async (request, response) => {
       const run = await runner.start(
         payload.workflowId,
         payload.input,
-        payload.startedBy?.trim() || 'local-user'
+        'unattributed-local-session'
       );
       const status = run.status === 'failed' ? 422 : run.status === 'needs_review' ? 202 : 201;
       sendJson(response, status, {run: redactRun(run), events: await runner.getRunEvents(run.id)});

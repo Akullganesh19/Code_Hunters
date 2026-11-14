@@ -91,7 +91,7 @@ export async function runAgentChat(input: AgentChatInput): Promise<{
     return analysis;
   };
   const pendingActions: Array<AnalystDecisionAction | AgentNavigationAction> = [];
-  const capabilityContext = {runId: 'interactive-chat', workflowId: 'agent.chat', startedBy: 'local-analyst'};
+  const capabilityContext = {runId: 'interactive-chat', workflowId: 'agent.chat', startedBy: 'unattributed-local-session'};
   const withDataset = (extra: Record<string, unknown> = {}) => ({
     transactions: edges,
     options: input.options,
