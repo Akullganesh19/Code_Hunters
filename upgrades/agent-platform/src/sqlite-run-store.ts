@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import initSqlJs, {type Database} from 'sql.js';
 import type {AgentRun, AgentRunEvent} from './contracts';
-import type {AgentRunStore} from './run-store';
+import {IdempotencyConflictError, type AgentRunStore} from './run-store';
 
 const require = createRequire(import.meta.url);
 const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm') as string;
@@ -113,17 +113,40 @@ export class SqliteAgentRunStore implements AgentRunStore {
         ON agent_run_events(run_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_agent_runs_created
         ON agent_runs(created_at DESC);
+      CREATE TABLE IF NOT EXISTS agent_idempotency_keys (
+        idempotency_key TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL,
+        run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE
+      );
     `);
     await store.recoverInterruptedRuns();
     await store.persist();
     return store;
   }
 
-  async create(run: AgentRun): Promise<void> {
+  async create(run: AgentRun, idempotency?: {key: string; fingerprint: string}): Promise<AgentRun | null> {
+    if (idempotency) {
+      const existing = this.database.exec(
+        'SELECT fingerprint, run_id FROM agent_idempotency_keys WHERE idempotency_key = ?',
+        [idempotency.key],
+      )[0]?.values[0];
+      if (existing) {
+        if (String(existing[0]) !== idempotency.fingerprint) {
+          throw new IdempotencyConflictError();
+        }
+        return this.get(String(existing[1]));
+      }
+    }
     this.database.run(
       'INSERT INTO agent_runs (run_id, created_at, updated_at, payload) VALUES (?, ?, ?, ?)',
       [run.id, run.createdAt, run.updatedAt, JSON.stringify(redactRun(run))],
     );
+    if (idempotency) {
+      this.database.run(
+        'INSERT INTO agent_idempotency_keys (idempotency_key, fingerprint, run_id) VALUES (?, ?, ?)',
+        [idempotency.key, idempotency.fingerprint, run.id],
+      );
+    }
     this.database.run(
       `DELETE FROM agent_runs
        WHERE run_id IN (
@@ -134,6 +157,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
       [this.retentionLimit],
     );
     await this.persist();
+    return null;
   }
 
   async update(run: AgentRun): Promise<void> {

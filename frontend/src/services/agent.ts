@@ -74,12 +74,13 @@ export async function sendAgentMessage(args: {
 
 export async function startFiveScreenReview(
   transactions: TransactionEdge[],
-  sourceLabel: string
+  sourceLabel: string,
+  idempotencyKey: string,
 ): Promise<AgentRun> {
   const response = await fetch(`${agentBaseUrl}/api/agent/runs`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: {'content-type': 'application/json'},
+    headers: {'content-type': 'application/json', 'idempotency-key': idempotencyKey},
     body: JSON.stringify({
       workflowId: 'aml.five_screen_review',
       input: {transactions, sourceLabel, benchmarkRows: 400},

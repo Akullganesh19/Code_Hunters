@@ -127,6 +127,33 @@ test('cancels queued and active workflows without starting later steps', async (
   assert.equal(events.some((event) => event.type === 'run_failed'), false);
 });
 
+test('deduplicates repeated workflow submissions and rejects changed payloads for the same key', async () => {
+  const registry = new CapabilityRegistry();
+  let executions = 0;
+  registry.register({
+    descriptor: {id: 'test.once', screen: 'overview', permission: 'read', description: 'Count execution.'},
+    execute: () => { executions += 1; return {ok: true}; },
+  });
+  const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
+  runner.registerWorkflow({
+    id: 'idempotent', name: 'Idempotent', description: 'A retry test.',
+    steps: [{id: 'once', capabilityId: 'test.once', resolveInput: (context) => context.initialInput}],
+  });
+  const idempotency = {key: 'retry-key-001', fingerprint: 'fingerprint-a'};
+  const first = await runner.enqueue('idempotent', {dataset: 'A'}, 'test-analyst', idempotency);
+  const retry = await runner.enqueue('idempotent', {dataset: 'A'}, 'test-analyst', idempotency);
+  assert.equal(retry.id, first.id);
+  await assert.rejects(
+    runner.enqueue('idempotent', {dataset: 'B'}, 'test-analyst', {...idempotency, fingerprint: 'fingerprint-b'}),
+    /different workflow request/,
+  );
+  for (let attempt = 0; attempt < 20 && (await runner.getRun(first.id))?.status !== 'completed'; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.equal((await runner.getRun(first.id))?.status, 'completed');
+  assert.equal(executions, 1);
+});
+
 test('compares detector settings against active findings without mutating the baseline', () => {
   const baseline = runDetectionPipeline(getDemoTransactions());
   const originalAlertIds = baseline.alerts.map((alert) => alert.alert_id);

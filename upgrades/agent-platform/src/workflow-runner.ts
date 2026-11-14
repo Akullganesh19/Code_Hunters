@@ -45,14 +45,20 @@ export class AgentWorkflowRunner {
   }
 
   async start(workflowId: string, initialInput: unknown, startedBy: string): Promise<AgentRun> {
-    const run = await this.createRun(workflowId, initialInput, startedBy, 'running');
+    const {run} = await this.createRun(workflowId, initialInput, startedBy, 'running');
     const active = this.launch(run, initialInput, startedBy);
     await active.execution;
     return (await this.store.get(run.id)) ?? run;
   }
 
-  async enqueue(workflowId: string, initialInput: unknown, startedBy: string): Promise<AgentRun> {
-    const run = await this.createRun(workflowId, initialInput, startedBy, 'queued');
+  async enqueue(
+    workflowId: string,
+    initialInput: unknown,
+    startedBy: string,
+    idempotency?: {key: string; fingerprint: string},
+  ): Promise<AgentRun> {
+    const {run, created} = await this.createRun(workflowId, initialInput, startedBy, 'queued', idempotency);
+    if (!created) return run;
     const controller = new AbortController();
     const execution = new Promise<void>((resolve, reject) => {
       setImmediate(() => {
@@ -83,7 +89,8 @@ export class AgentWorkflowRunner {
     initialInput: unknown,
     startedBy: string,
     status: 'queued' | 'running',
-  ): Promise<AgentRun> {
+    idempotency?: {key: string; fingerprint: string},
+  ): Promise<{run: AgentRun; created: boolean}> {
     const workflow = this.workflows.get(workflowId);
     if (!workflow) throw new Error(`Workflow "${workflowId}" is not registered.`);
 
@@ -98,9 +105,10 @@ export class AgentWorkflowRunner {
       completedSteps: [],
       outputs: {},
     };
-    await this.store.create(run);
+    const existing = await this.store.create(run, idempotency);
+    if (existing) return {run: existing, created: false};
     await this.record(run, {type: 'run_started', detail: workflow.name});
-    return run;
+    return {run, created: true};
   }
 
   private launch(run: AgentRun, initialInput: unknown, startedBy: string): ActiveRun {

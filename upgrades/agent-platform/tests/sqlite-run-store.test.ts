@@ -112,6 +112,41 @@ test('SQLite store marks interrupted workflows failed after a service restart', 
   }
 });
 
+test('SQLite idempotency keys survive restart and prevent duplicate submissions', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tracelayer-agent-idempotency-'));
+  const databasePath = path.join(directory, 'runs.sqlite');
+  const makeRun = (id: string): AgentRun => ({
+    id,
+    workflowId: 'aml.five_screen_review',
+    status: 'queued',
+    startedBy: 'local-user',
+    createdAt: '2026-11-15T00:00:00.000Z',
+    updatedAt: '2026-11-15T00:00:00.000Z',
+    completedSteps: [],
+    outputs: {},
+  });
+  const key = {key: 'stable-retry-key', fingerprint: 'request-fingerprint'};
+
+  try {
+    const store = await SqliteAgentRunStore.open(databasePath);
+    assert.equal(await store.create(makeRun('original-run'), key), null);
+    await store.close();
+
+    const reopened = await SqliteAgentRunStore.open(databasePath);
+    const duplicate = await reopened.create(makeRun('duplicate-run'), key);
+    assert.equal(duplicate?.id, 'original-run');
+    assert.equal(duplicate?.status, 'failed');
+    await assert.rejects(
+      reopened.create(makeRun('changed-request'), {...key, fingerprint: 'different-request'}),
+      /different workflow request/,
+    );
+    assert.equal(await reopened.get('duplicate-run'), null);
+    await reopened.close();
+  } finally {
+    await rm(directory, {recursive: true, force: true});
+  }
+});
+
 test('SQLite run retention prunes the oldest summaries and their events', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tracelayer-agent-retention-'));
   const databasePath = path.join(directory, 'runs.sqlite');

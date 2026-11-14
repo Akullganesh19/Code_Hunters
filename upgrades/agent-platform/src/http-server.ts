@@ -1,8 +1,10 @@
 import {createServer, type ServerResponse} from 'node:http';
+import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {createAmlCapabilityRegistry} from './capabilities/aml-capabilities';
 import {redactRun, SqliteAgentRunStore} from './sqlite-run-store';
 import {AgentWorkflowRunner} from './workflow-runner';
+import {IdempotencyConflictError} from './run-store';
 import {fiveScreenReviewWorkflow} from './workflows/five-screen-review';
 import {runAgentChat} from './agent-chat';
 import {APICallError} from 'ai';
@@ -84,7 +86,7 @@ const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') {
     response.writeHead(204, {
       'access-control-allow-methods': 'DELETE,GET,POST,OPTIONS',
-      'access-control-allow-headers': 'content-type',
+      'access-control-allow-headers': 'content-type,idempotency-key',
     });
     response.end();
     return;
@@ -188,13 +190,28 @@ const server = createServer(async (request, response) => {
 
       const payload = parsed.data;
       validateTransactions(payload.input.transactions);
+      const idempotencyHeader = request.headers['idempotency-key'];
+      if (Array.isArray(idempotencyHeader) || (idempotencyHeader !== undefined && !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyHeader))) {
+        sendJson(response, 400, {error: 'Idempotency-Key must be 8 to 128 letters, numbers, periods, underscores, colons, or hyphens.'});
+        return;
+      }
+      const idempotency = typeof idempotencyHeader === 'string' ? {
+        key: idempotencyHeader,
+        fingerprint: createHash('sha256').update(JSON.stringify({workflowId: payload.workflowId, input: payload.input})).digest('hex'),
+      } : undefined;
       const run = await runner.enqueue(
         payload.workflowId,
         payload.input,
-        'unattributed-local-session'
+        'unattributed-local-session',
+        idempotency,
       );
-      sendJson(response, 202, {run: redactRun(run), events: await runner.getRunEvents(run.id)});
+      const status = run.status === 'queued' || run.status === 'running' ? 202 : 200;
+      sendJson(response, status, {run: redactRun(run), events: await runner.getRunEvents(run.id)});
     } catch (error) {
+      if (error instanceof IdempotencyConflictError) {
+        sendJson(response, 409, {error: error.message});
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Could not start workflow.';
       const status = error instanceof RequestBodyTooLargeError ? 413 : error instanceof SyntaxError ? 400 : 422;
       sendJson(response, status, {error: status === 413 ? 'Request body exceeds the 25 MB limit.' : status === 400 ? 'Invalid JSON request body.' : message});

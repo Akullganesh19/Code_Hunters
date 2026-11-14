@@ -68,6 +68,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
   const [modelName, setModelName] = useState('Configured model');
   const [error, setError] = useState<string | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
+  const workflowIdempotencyKey = useRef<string | null>(null);
 
   useEffect(() => () => chatAbortController.current?.abort(), []);
 
@@ -90,7 +91,9 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
     setBusy(true);
     setError(null);
     try {
-      let currentRun = await startFiveScreenReview(edges, sourceLabel);
+      const idempotencyKey = workflowIdempotencyKey.current ?? globalThis.crypto.randomUUID();
+      workflowIdempotencyKey.current = idempotencyKey;
+      let currentRun = await startFiveScreenReview(edges, sourceLabel, idempotencyKey);
       setRun(currentRun);
       setRecentRuns((current) => [currentRun, ...current.filter((item) => item.id !== currentRun.id)].slice(0, 8));
       while (currentRun.status === 'queued' || currentRun.status === 'running') {
@@ -98,7 +101,11 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
         currentRun = await getAgentRun(currentRun.id);
         setRun(currentRun);
       }
+      workflowIdempotencyKey.current = null;
     } catch (cause) {
+      if (cause instanceof Error && cause.message.includes('different workflow request')) {
+        workflowIdempotencyKey.current = null;
+      }
       setError(cause instanceof Error ? cause.message : 'The agent could not start this review.');
     } finally {
       setBusy(false);
