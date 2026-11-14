@@ -12,6 +12,9 @@ export class CapabilityRegistry {
     if (!id.trim() || !description.trim()) {
       throw new Error('A capability needs a stable ID and description.');
     }
+    if (!Number.isInteger(capability.descriptor.contractVersion) || capability.descriptor.contractVersion < 1) {
+      throw new Error(`Capability "${id}" needs a positive integer contract version.`);
+    }
     if (this.capabilities.has(id)) {
       throw new Error(`Capability "${id}" is already registered.`);
     }

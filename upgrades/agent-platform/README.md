@@ -31,7 +31,7 @@ AGENT_MODEL_API_KEY=your-groq-key
 | SAR Case Dossier | Validate alert references, source transactions, ledger metrics, and digest before enabling export |
 | Evaluation | Evaluate eligible labelled data; run one synthetic benchmark; compare held-out metrics across two deterministic seeds to inspect seed sensitivity |
 
-The agent can also run the existing five-screen workflow and navigate to a selected screen or verified alert. Use **Stop** to cancel an in-flight chat request or **Cancel workflow** to stop a queued or running review; closing the agent panel cancels its active chat request. Workflow execution is currently in-memory and will not resume after a service restart. The agent cannot read files outside TraceLayer or operate the host computer. Disposition proposals require an analyst click. SAR drafts are never filed. Account restrictions, external messages, and filing are not agent capabilities.
+The agent can also run the existing five-screen workflow and navigate to a selected screen or verified alert. Each registered capability exposes a positive `contractVersion` in the runtime capability list and the checked-in manifest; increment it when its input or output contract changes. Use **Stop** to cancel an in-flight chat request or **Cancel workflow** to stop a queued or running review; closing the agent panel cancels its active chat request. Workflow execution is currently in-memory and will not resume after a service restart. The agent cannot read files outside TraceLayer or operate the host computer. Disposition proposals require an analyst click. SAR drafts are never filed. Account restrictions, external messages, and filing are not agent capabilities.
 
 ## Run locally
 

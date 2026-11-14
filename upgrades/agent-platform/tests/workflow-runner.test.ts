@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {getDemoTransactions, runDetectionPipeline} from '@tracelayer/aml-engine';
 import {CapabilityRegistry} from '../src/capability-registry';
@@ -17,6 +18,19 @@ test('registers an action for each of the five current screens', () => {
     'overview',
     'sar_dossier',
   ]);
+});
+
+test('publishes a positive version for every registered capability contract', async () => {
+  const registry = createAmlCapabilityRegistry();
+  const manifest = JSON.parse(await readFile(new URL('../capabilities.json', import.meta.url), 'utf8')) as {
+    capabilities: Array<{id: string; contractVersion?: number}>;
+  };
+  const registered = registry.list();
+  assert.deepEqual(manifest.capabilities.map(({id}) => id).sort(), registered.map(({id}) => id).sort());
+  for (const descriptor of registered) {
+    assert.ok(Number.isInteger(descriptor.contractVersion) && descriptor.contractVersion > 0);
+    assert.equal(manifest.capabilities.find(({id}) => id === descriptor.id)?.contractVersion, descriptor.contractVersion);
+  }
 });
 
 test('validates active datasets and returns coverage without transaction rows', async () => {
@@ -89,7 +103,7 @@ test('cancels queued and active workflows without starting later steps', async (
   let signalFirstStepStarted!: () => void;
   const firstStepStarted = new Promise<void>((resolve) => { signalFirstStepStarted = resolve; });
   registry.register({
-    descriptor: {id: 'test.wait', screen: 'overview', permission: 'read', description: 'Wait for cancellation.'},
+    descriptor: {id: 'test.wait', contractVersion: 1, screen: 'overview', permission: 'read', description: 'Wait for cancellation.'},
     execute: (_input, context) => {
       firstStepCalls += 1;
       signalFirstStepStarted();
@@ -99,7 +113,7 @@ test('cancels queued and active workflows without starting later steps', async (
     },
   });
   registry.register({
-    descriptor: {id: 'test.after', screen: 'overview', permission: 'read', description: 'Must not run after cancellation.'},
+    descriptor: {id: 'test.after', contractVersion: 1, screen: 'overview', permission: 'read', description: 'Must not run after cancellation.'},
     execute: () => { laterStepCalls += 1; return {ok: true}; },
   });
   const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
@@ -131,7 +145,7 @@ test('deduplicates repeated workflow submissions and rejects changed payloads fo
   const registry = new CapabilityRegistry();
   let executions = 0;
   registry.register({
-    descriptor: {id: 'test.once', screen: 'overview', permission: 'read', description: 'Count execution.'},
+    descriptor: {id: 'test.once', contractVersion: 1, screen: 'overview', permission: 'read', description: 'Count execution.'},
     execute: () => { executions += 1; return {ok: true}; },
   });
   const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
@@ -198,6 +212,7 @@ test('does not execute write capabilities automatically', async () => {
   registry.register({
     descriptor: {
       id: 'case.submit',
+      contractVersion: 1,
       screen: 'sar_dossier',
       permission: 'write',
       description: 'Submit a case externally.',
@@ -227,6 +242,7 @@ test('rejects duplicate capability and workflow identifiers', () => {
   const capability = {
     descriptor: {
       id: 'overview.ping',
+      contractVersion: 1,
       screen: 'overview' as const,
       permission: 'read' as const,
       description: 'A test capability.',
@@ -235,6 +251,10 @@ test('rejects duplicate capability and workflow identifiers', () => {
   };
   registry.register(capability);
   assert.throws(() => registry.register(capability), /already registered/);
+  assert.throws(() => new CapabilityRegistry().register({
+    ...capability,
+    descriptor: {...capability.descriptor, contractVersion: 0},
+  }), /positive integer contract version/);
 
   const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
   const workflow = {

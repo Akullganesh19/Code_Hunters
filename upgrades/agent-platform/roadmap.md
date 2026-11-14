@@ -25,7 +25,7 @@ Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MOD
 - Propagate interactive chat cancellation from the browser disconnect through the HTTP handler to the model provider. Implemented for chat requests.
 - Add a durable restartable queue and bounded retries. Workflow cancellation and durable request-level idempotency are implemented; the current queue scheduler is in-memory, so queued/running runs are marked failed after restart rather than resumed.
 - Add complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
-- Version capability input/output contracts and audit tool calls without storing unnecessary transaction contents.
+- Add machine-readable input/output schemas for the versioned capabilities and audit tool calls without storing unnecessary transaction contents. Positive capability contract versions and registry/manifest parity are implemented.
 - Show progress, evidence, and pending analyst actions consistently in the frontend.
 
 **Done when:** a run survives service restarts and can be inspected later with a complete, access-controlled history.

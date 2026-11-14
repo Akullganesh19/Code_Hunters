@@ -174,6 +174,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'overview.validate_dataset',
+      contractVersion: 1,
       screen: 'overview',
       permission: 'read',
       description: 'Validate the active dataset and return privacy-conscious schema and coverage diagnostics without exposing transaction rows.',
@@ -241,6 +242,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'overview.search_dataset',
+      contractVersion: 1,
       screen: 'overview',
       permission: 'read',
       description: 'Search current alerts, accounts, and transaction IDs in the active dataset.',
@@ -256,6 +258,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'overview.compare_detector_settings',
+      contractVersion: 1,
       screen: 'overview',
       permission: 'read',
       description: 'Compare candidate detector settings with active findings without changing the current dataset or settings.',
@@ -272,6 +275,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'overview.analyze_dataset',
+      contractVersion: 1,
       screen: 'overview',
       permission: 'read',
       description: 'Run the deterministic AML pipeline and return ranked alerts with normalized transactions.',
@@ -291,6 +295,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'investigation.inspect_alert',
+      contractVersion: 1,
       screen: 'investigation',
       permission: 'read',
       description: 'Return a bounded graph subgraph for an alert and preserve transaction chronology.',
@@ -314,6 +319,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'investigation.lookup_transaction',
+      contractVersion: 1,
       screen: 'investigation',
       permission: 'read',
       description: 'Look up one transaction by exact ID and return linked alert evidence.',
@@ -335,6 +341,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'investigation.account_activity',
+      contractVersion: 1,
       screen: 'investigation',
       permission: 'read',
       description: 'Summarize an account’s transaction activity and linked alerts.',
@@ -362,6 +369,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'investigation.propose_disposition',
+      contractVersion: 1,
       screen: 'investigation',
       permission: 'write',
       description: 'Prepare a Confirmed or Dismissed disposition proposal; the analyst must apply it in the UI.',
@@ -390,6 +398,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'adversarial.run_scenario',
+      contractVersion: 1,
       screen: 'adversarial_lab',
       permission: 'read',
       description: 'Run a synthetic laundering motif and compare detector findings with a simple amount threshold.',
@@ -426,6 +435,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'dossier.draft_case',
+      contractVersion: 1,
       screen: 'sar_dossier',
       permission: 'draft',
       description: 'Create and validate an evidence-linked case draft before returning exportable Markdown; never submit it externally.',
@@ -453,6 +463,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'evaluation.run_benchmark',
+      contractVersion: 1,
       screen: 'evaluation',
       permission: 'read',
       description: 'Run a reproducible temporal benchmark and return held-out metrics.',
@@ -473,6 +484,7 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
   registry.register({
     descriptor: {
       id: 'evaluation.compare_benchmarks',
+      contractVersion: 1,
       screen: 'evaluation',
       permission: 'read',
       description: 'Compare held-out metrics across two bounded, deterministic synthetic benchmark seeds and report seed sensitivity.',

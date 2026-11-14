@@ -10,6 +10,7 @@ export type AgentRunStatus = 'queued' | 'running' | 'needs_review' | 'completed'
 
 export interface CapabilityDescriptor {
   id: string;
+  contractVersion: number;
   screen: AgentScreen;
   permission: CapabilityPermission;
   description: string;

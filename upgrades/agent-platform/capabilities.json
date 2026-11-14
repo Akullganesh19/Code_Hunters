@@ -3,48 +3,84 @@
   "capabilities": [
     {
       "id": "overview.validate_dataset",
+      "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
       "description": "Validate required transaction fields and return privacy-conscious dataset coverage diagnostics without exposing rows."
     },
     {
+      "id": "overview.search_dataset",
+      "contractVersion": 1,
+      "screen": "overview",
+      "permission": "read",
+      "description": "Search current alerts, accounts, and transaction IDs in the active dataset."
+    },
+    {
       "id": "overview.compare_detector_settings",
+      "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
       "description": "Compare candidate detector settings with active findings without changing the current dataset or settings."
     },
     {
       "id": "overview.analyze_dataset",
+      "contractVersion": 1,
       "screen": "overview",
       "permission": "read",
       "description": "Validate a dataset, run the AML analysis pipeline, and return ranked alerts with transaction evidence."
     },
     {
       "id": "investigation.inspect_alert",
+      "contractVersion": 1,
       "screen": "investigation",
       "permission": "read",
       "description": "Build a chronological alert timeline, bounded graph context, and evidence-linked alternative explanations."
     },
     {
+      "id": "investigation.lookup_transaction",
+      "contractVersion": 1,
+      "screen": "investigation",
+      "permission": "read",
+      "description": "Look up one transaction by exact ID and return linked alert evidence."
+    },
+    {
+      "id": "investigation.account_activity",
+      "contractVersion": 1,
+      "screen": "investigation",
+      "permission": "read",
+      "description": "Summarize an account’s transaction activity and linked alerts."
+    },
+    {
+      "id": "investigation.propose_disposition",
+      "contractVersion": 1,
+      "screen": "investigation",
+      "permission": "draft",
+      "description": "Propose a Confirmed or Dismissed disposition and require analyst confirmation."
+    },
+    {
       "id": "adversarial.run_scenario",
+      "contractVersion": 1,
       "screen": "adversarial_lab",
       "permission": "read",
       "description": "Run a synthetic motif scenario and compare graph detection with configured baselines."
     },
     {
       "id": "dossier.draft_case",
+      "contractVersion": 1,
       "screen": "sar_dossier",
       "permission": "draft",
       "description": "Prepare a case draft, validate evidence links and digest against the active dataset, and return Markdown only when checks pass."
     },
     {
       "id": "evaluation.compare_benchmarks",
+      "contractVersion": 1,
       "screen": "evaluation",
       "permission": "read",
       "description": "Compare held-out metrics across two bounded deterministic synthetic benchmark seeds and report seed sensitivity."
     },
     {
       "id": "evaluation.run_benchmark",
+      "contractVersion": 1,
       "screen": "evaluation",
       "permission": "read",
       "description": "Run a reproducible benchmark and report metrics, counterexamples, and drift indicators."
