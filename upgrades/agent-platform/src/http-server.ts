@@ -3,12 +3,14 @@ import {createAmlCapabilityRegistry} from './capabilities/aml-capabilities';
 import {InMemoryAgentRunStore} from './run-store';
 import {AgentWorkflowRunner} from './workflow-runner';
 import {fiveScreenReviewWorkflow} from './workflows/five-screen-review';
+import {GemmaTaskAgent} from './gemma-task-agent';
 
 const port = Number(process.env.AGENT_PORT ?? 3100);
 const maxBodyBytes = 25 * 1024 * 1024;
 const registry = createAmlCapabilityRegistry();
 const runner = new AgentWorkflowRunner(registry, new InMemoryAgentRunStore());
 runner.registerWorkflow(fiveScreenReviewWorkflow);
+const gemmaTaskAgent = new GemmaTaskAgent(registry, runner);
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {'content-type': 'application/json; charset=utf-8'});
@@ -42,6 +44,33 @@ const server = createServer(async (request, response) => {
 
   if (request.method === 'GET' && url.pathname === '/api/agent/workflows') {
     sendJson(response, 200, {workflows: runner.listWorkflows()});
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/agent/tasks') {
+    try {
+      const body = await readJson(request);
+      if (!body || typeof body !== 'object' || !('task' in body)) {
+        sendJson(response, 400, {error: 'Expected a task string and optional input fields.'});
+        return;
+      }
+      const payload = body as {task: unknown; input?: unknown; startedBy?: string};
+      if (typeof payload.task !== 'string' || !payload.task.trim()) {
+        sendJson(response, 400, {error: 'Task must be a non-empty string.'});
+        return;
+      }
+      const result = await gemmaTaskAgent.run(
+        payload.task,
+        payload.input ?? {},
+        payload.startedBy?.trim() || 'local-user'
+      );
+      const status = result.run.status === 'failed' ? 422 : result.run.status === 'needs_review' ? 202 : 201;
+      sendJson(response, status, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not run the Gemma agent task.';
+      const status = message.includes('Gemma service unavailable') ? 503 : 400;
+      sendJson(response, status, {error: message});
+    }
     return;
   }
 

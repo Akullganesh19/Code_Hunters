@@ -34,6 +34,10 @@ export class AgentWorkflowRunner {
     this.workflows.set(workflow.id, workflow);
   }
 
+  unregisterWorkflow(workflowId: string): void {
+    this.workflows.delete(workflowId);
+  }
+
   listWorkflows(): Array<Pick<WorkflowDefinition, 'id' | 'name' | 'description'>> {
     return [...this.workflows.values()].map(({id, name, description}) => ({id, name, description}));
   }

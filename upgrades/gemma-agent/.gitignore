@@ -1,0 +1,7 @@
+__pycache__/
+prepared/
+checkpoints/
+*.weights.h5
+*.keras
+*.safetensors
+*.log

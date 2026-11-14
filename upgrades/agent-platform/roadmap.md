@@ -2,7 +2,7 @@
 
 ## Prototype status
 
-The isolated prototype now has a capability registry, in-memory run/event store, workflow runner, five-screen workflow, and localhost HTTP API. It can execute the registered deterministic workflow and pause for review. It has no model planner, durable storage, schedule/event trigger, authentication, or connection to the judge/demo UI yet.
+The isolated prototype now has a capability registry, in-memory run/event store, workflow runner, five-screen workflow, and localhost HTTP API. The Gemma integration can plan a sequence from registered screen capabilities and execute it through the workflow runner once a fine-tuned adapter is served. A hosted-GPU LoRA pipeline and held-out evaluation are under `upgrades/gemma-agent/`; no trained adapter is checked in. Durable storage, schedules/event triggers, authentication, and a frontend connection remain future work.
 
 ## Phase 1 — foundations
 

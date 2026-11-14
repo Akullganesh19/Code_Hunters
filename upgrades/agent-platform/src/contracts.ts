@@ -1,9 +1,5 @@
-export type AgentScreen =
-  | 'overview'
-  | 'investigation'
-  | 'adversarial_lab'
-  | 'sar_dossier'
-  | 'evaluation';
+/** Screen names are open-ended so new screens can register capabilities without editing the agent core. */
+export type AgentScreen = string;
 
 export type CapabilityPermission = 'read' | 'draft' | 'write';
 export type AgentRunStatus = 'queued' | 'running' | 'needs_review' | 'completed' | 'failed';

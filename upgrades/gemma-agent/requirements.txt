@@ -1,0 +1,2 @@
+keras>=3.8
+keras-hub>=0.28
