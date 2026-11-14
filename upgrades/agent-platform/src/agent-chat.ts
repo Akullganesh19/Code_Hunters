@@ -136,6 +136,24 @@ export async function runAgentChat(input: AgentChatInput): Promise<{
           };
         },
       }),
+      compareDetectorSettings: tool({
+        description: 'Run a read-only Overview what-if. Compare one or more candidate detector settings with the current alert set and report added, removed, and unchanged findings. This never changes active settings.',
+        inputSchema: z.object({
+          K: z.number().int().min(2).max(100).optional(),
+          WHours: z.number().min(1).max(720).optional(),
+          cycleWHours: z.number().min(1).max(720).optional(),
+          HMinutes: z.number().min(1).max(1440).optional(),
+          minRetention: z.number().min(0).max(1).optional(),
+        }).strict().refine((settings) => Object.keys(settings).length > 0, 'Provide at least one detector setting to compare.'),
+        execute: async (candidateOptions) => {
+          const baseline = getAnalysis();
+          return capabilities.execute('overview.compare_detector_settings', {
+            transactions: edges,
+            baselineAlerts: baseline.alerts,
+            candidateOptions: {...input.options, ...candidateOptions},
+          }, capabilityContext);
+        },
+      }),
       navigateToScreen: tool({
         description: 'Navigate the TraceLayer workspace to a named screen when the analyst asks to open or view it. For Investigation, include an alertId only after verifying it with a TraceLayer tool.',
         inputSchema: z.object({

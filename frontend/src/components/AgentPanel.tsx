@@ -142,7 +142,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           <div className="rounded-xl border border-violet-400/20 bg-violet-500/5 p-3 text-xs leading-5 text-[#cbd5ce]">
-            I can search, analyze, investigate, simulate, evaluate, and draft across all five TraceLayer screens. Deterministic AML tools provide findings; I explain them with linked evidence.
+            I can search, analyze, compare detector settings, investigate, simulate, evaluate, and draft across all five TraceLayer screens. Deterministic AML tools provide findings; I explain them with linked evidence.
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
@@ -174,7 +174,7 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
           </div>}
 
           {messages.length === 0 && <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm leading-6 text-[#aab7ae]">
-            Ask about this dataset, an alert, account, or transaction. You can also request a sandbox scenario, a benchmark, or an evidence-linked dossier draft.
+            Ask about this dataset, an alert, account, or transaction. You can compare detector settings, request a sandbox scenario or benchmark, or draft an evidence-linked dossier.
           </div>}
 
           {messages.map((message, index) => <div key={`${index}-${message.role}`} className={`rounded-xl p-3 text-sm leading-6 ${message.role === 'user' ? 'ml-8 bg-violet-500/15 text-violet-50' : 'mr-3 border border-white/10 bg-white/[0.035] text-[#e3e9e5]'}`}>

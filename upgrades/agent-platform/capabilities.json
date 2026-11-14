@@ -2,6 +2,12 @@
   "version": 1,
   "capabilities": [
     {
+      "id": "overview.compare_detector_settings",
+      "screen": "overview",
+      "permission": "read",
+      "description": "Compare candidate detector settings with active findings without changing the current dataset or settings."
+    },
+    {
       "id": "overview.analyze_dataset",
       "screen": "overview",
       "permission": "read",

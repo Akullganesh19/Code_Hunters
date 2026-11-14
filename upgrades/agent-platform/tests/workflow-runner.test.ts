@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {getDemoTransactions} from '@tracelayer/aml-engine';
+import {getDemoTransactions, runDetectionPipeline} from '@tracelayer/aml-engine';
 import {CapabilityRegistry} from '../src/capability-registry';
-import {createAmlCapabilityRegistry} from '../src/capabilities/aml-capabilities';
+import {compareDetectorSettings, createAmlCapabilityRegistry} from '../src/capabilities/aml-capabilities';
 import {InMemoryAgentRunStore} from '../src/run-store';
 import {AgentWorkflowRunner} from '../src/workflow-runner';
 import {fiveScreenReviewWorkflow} from '../src/workflows/five-screen-review';
@@ -45,6 +45,28 @@ test('runs the five-screen workflow and pauses its dossier draft for review', as
   const events = await runner.getRunEvents(run.id);
   assert.equal(events.filter((event) => event.type === 'step_completed').length, 5);
   assert.equal(events.at(-1)?.type, 'approval_required');
+});
+
+test('compares detector settings against active findings without mutating the baseline', () => {
+  const baseline = runDetectionPipeline(getDemoTransactions());
+  const originalAlertIds = baseline.alerts.map((alert) => alert.alert_id);
+  const comparison = compareDetectorSettings(baseline.edges, baseline.alerts, {
+    K: 100,
+    WHours: 1,
+    cycleWHours: 1,
+    HMinutes: 1,
+    minRetention: 1,
+  });
+
+  assert.equal(comparison.baselineAlertCount, 3);
+  assert.equal(comparison.candidateAlertCount, 0);
+  assert.equal(comparison.removedAlertCount, 3);
+  assert.equal(comparison.addedAlertCount, 0);
+  assert.equal(comparison.removedExamples.length, 3);
+  assert.deepEqual(baseline.alerts.map((alert) => alert.alert_id), originalAlertIds);
+  assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {K: 1}), /outside its supported range/);
+  assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {riskModel: {}}), /Unsupported comparison setting/);
+  assert.throws(() => compareDetectorSettings(baseline.edges, baseline.alerts, {}), /at least one/);
 });
 
 test('does not execute write capabilities automatically', async () => {

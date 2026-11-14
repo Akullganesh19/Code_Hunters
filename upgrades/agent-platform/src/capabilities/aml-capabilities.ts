@@ -11,6 +11,7 @@ import {
   validateTransactions,
   type AdversarialMotifConfig,
   type Alert,
+  type DetectionPipelineOptions,
   type RawTransactionInput,
   type TransactionEdge,
 } from '@tracelayer/aml-engine';
@@ -30,6 +31,68 @@ function transactionsFrom(input: Record<string, unknown>): RawTransactionInput[]
   return input.transactions as RawTransactionInput[];
 }
 
+function candidateOptionsFrom(value: unknown): DetectionPipelineOptions {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Comparison settings must be an object.');
+  }
+  const candidate = value as Record<string, unknown>;
+  const bounds: Record<string, {min: number; max: number; integer?: boolean}> = {
+    K: {min: 2, max: 100, integer: true},
+    WHours: {min: 1, max: 720},
+    cycleWHours: {min: 1, max: 720},
+    HMinutes: {min: 1, max: 1440},
+    minRetention: {min: 0, max: 1},
+  };
+  const options: DetectionPipelineOptions = {};
+  for (const [key, rawValue] of Object.entries(candidate)) {
+    const bound = bounds[key];
+    if (!bound) throw new Error(`Unsupported comparison setting "${key}".`);
+    if (typeof rawValue !== 'number' || !Number.isFinite(rawValue) || rawValue < bound.min || rawValue > bound.max || (bound.integer && !Number.isInteger(rawValue))) {
+      throw new Error(`Comparison setting "${key}" is outside its supported range.`);
+    }
+    options[key as keyof DetectionPipelineOptions] = rawValue as never;
+  }
+  if (Object.keys(options).length === 0) throw new Error('Provide at least one comparison setting.');
+  return options;
+}
+
+function alertSignature(alert: Alert): string {
+  return JSON.stringify([
+    alert.typology,
+    [...alert.accounts].sort(),
+    [...alert.tx_ids].sort(),
+  ]);
+}
+
+export function compareDetectorSettings(
+  edges: TransactionEdge[],
+  baselineAlerts: Alert[],
+  candidateOptions: unknown,
+) {
+  const options = candidateOptionsFrom(candidateOptions);
+  const result = runDetectionPipeline(edges, options);
+  const baselineBySignature = new Map(baselineAlerts.map((alert) => [alertSignature(alert), alert]));
+  const candidateBySignature = new Map(result.alerts.map((alert) => [alertSignature(alert), alert]));
+  const added = result.alerts.filter((alert) => !baselineBySignature.has(alertSignature(alert)));
+  const removed = baselineAlerts.filter((alert) => !candidateBySignature.has(alertSignature(alert)));
+  return {
+    baselineAlertCount: baselineAlerts.length,
+    candidateAlertCount: result.alerts.length,
+    addedAlertCount: added.length,
+    removedAlertCount: removed.length,
+    unchangedAlertCount: result.alerts.length - added.length,
+    candidateOptions: options,
+    runtimeMs: result.runtimeMs,
+    addedExamples: added.slice(0, 12).map(({alert_id, typology, priority_score, accounts, tx_ids}) => ({
+      alertId: alert_id, typology, priority: priority_score, accounts, transactionIds: tx_ids,
+    })),
+    removedExamples: removed.slice(0, 12).map(({alert_id, typology, priority_score, accounts, tx_ids}) => ({
+      alertId: alert_id, typology, priority: priority_score, accounts, transactionIds: tx_ids,
+    })),
+    note: 'This read-only what-if uses the current dataset. It does not change active settings or analyst dispositions.',
+  };
+}
+
 export function createAmlCapabilityRegistry(): CapabilityRegistry {
   const registry = new CapabilityRegistry();
 
@@ -45,6 +108,22 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
       const edges = validateTransactions(transactionsFrom(payload));
       const analysis = runDetectionPipeline(edges, payload.options as never);
       return searchDataset(String(payload.query ?? ''), edges, analysis.alerts, 12);
+    },
+  });
+
+  registry.register({
+    descriptor: {
+      id: 'overview.compare_detector_settings',
+      screen: 'overview',
+      permission: 'read',
+      description: 'Compare candidate detector settings with active findings without changing the current dataset or settings.',
+    },
+    execute(input) {
+      const payload = objectInput(input);
+      const edges = validateTransactions(transactionsFrom(payload));
+      const baselineAlerts = payload.baselineAlerts;
+      if (!Array.isArray(baselineAlerts)) throw new Error('Comparison input must include the active baseline alerts.');
+      return compareDetectorSettings(edges, baselineAlerts as Alert[], payload.candidateOptions);
     },
   });
 
