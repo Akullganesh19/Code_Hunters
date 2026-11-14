@@ -138,7 +138,7 @@ export function SarDossierScreen({
           </div>
         </div>
 
-        {/* Audit-Ready SAR Preview */}
+        {/* Analyst Review Draft */}
         <div className="space-y-4 lg:col-span-8">
           <div className="rounded-xl border border-white/10 bg-[#15201a]/80 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
@@ -149,11 +149,11 @@ export function SarDossierScreen({
                     {dossier.caseId}
                   </h3>
                   <span className="rounded-full border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 to-violet-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-200">
-                    FIU-IND Finnet 2.0 / FinCEN SAR Ready
+                    Analyst Review Draft · Not a Regulatory Filing
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-[#93a199]">
-                  Audit-Ready Suspicious Activity Report Preview · Source: {dossier.sourceLabel}
+                  Evidence-linked case dossier preview · Source: {dossier.sourceLabel}
                 </p>
               </div>
 

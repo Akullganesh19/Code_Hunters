@@ -305,7 +305,7 @@ function TraceLayerApp() {
               {activeScreen === 'Adversarial Lab' &&
                 'What-If Stress-Test Sandbox: configure and inject synthetic laundering motifs to compare graph detection against single-tx thresholds.'}
               {activeScreen === 'SAR Case Dossier' &&
-                'Compliance & Export: audit-ready Suspicious Activity Report narrative, chronological ledger, and deterministic SHA-256 evidence digest.'}
+                'Analyst review draft with a chronological evidence ledger and SHA-256 digest. Not a regulatory filing.'}
               {activeScreen === 'Evaluation' &&
                 '3-Tier Benchmark & Telemetry: held-out temporal split metrics, ablation table, counterexample verification, and PSI drift telemetry.'}
             </p>

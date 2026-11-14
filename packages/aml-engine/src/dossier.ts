@@ -193,7 +193,7 @@ export function formatDossierMarkdown(dossier: SarCaseDossier): string {
   const lines: string[] = [
     `# Suspicious Activity Report Dossier — ${dossier.caseId}`,
     '',
-    'Regulatory Format: FIU-IND Finnet 2.0 / FinCEN BSA',
+    'Internal case dossier draft for analyst review. This is not a regulatory filing.',
     `- **Data Source:** ${dossier.sourceLabel}`,
     `- **Included Alerts:** ${dossier.alertIds.join(', ') || 'None'}`,
     `- **Typologies:** ${dossier.typologies.join(', ') || 'None'}`,

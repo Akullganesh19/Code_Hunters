@@ -287,7 +287,9 @@ test('SAR Case Dossier SHA-256 digest is deterministic and Markdown export conta
   const md = formatDossierMarkdown(d1);
   assert.ok(md.includes(d1.sha256Digest));
   assert.ok(md.includes(CLOSING_DISCLAIMER));
-  assert.ok(md.includes('Regulatory Format: FIU-IND Finnet 2.0 / FinCEN BSA'));
+  assert.ok(md.includes('Internal case dossier draft for analyst review. This is not a regulatory filing.'));
+  assert.ok(!md.includes('Finnet 2.0'));
+  assert.ok(!md.includes('FinCEN BSA'));
 });
 
 test('Temporal split 3-tier evaluation and counterexample suite pass cleanly', () => {
