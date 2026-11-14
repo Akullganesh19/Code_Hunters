@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minimize2, RotateCcw } from 'lucide-react';
-import type { Alert, TransactionEdge } from '../engine/schema';
+import type { Alert, TransactionEdge } from '@tracelayer/aml-engine';
 
 interface TransactionGraph3DProps {
   edges: TransactionEdge[];

@@ -18,11 +18,13 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
-        "./*"
-      ]
+        "./src/*"
+      ],
+      "@tracelayer/aml-engine": ["../packages/aml-engine/src/index.ts"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../packages/aml-engine/src/**/*.ts"],
   "exclude": ["dist"]
 }

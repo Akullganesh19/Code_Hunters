@@ -26,7 +26,7 @@ jobs:
         run: npm install --no-package-lock --legacy-peer-deps
 
       - name: Run engine tests
-        run: npx tsx --test src/engine/tracelayer.test.ts
+        run: npm test
 
       - name: Type-check
         run: npm run lint

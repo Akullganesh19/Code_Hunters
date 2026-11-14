@@ -8,8 +8,8 @@ import {
   Play,
   XCircle,
 } from 'lucide-react';
-import { extractMotifSubgraph } from '../engine/pipeline';
-import type { Alert, TransactionEdge } from '../engine/schema';
+import { extractMotifSubgraph } from '@tracelayer/aml-engine';
+import type { Alert, TransactionEdge } from '@tracelayer/aml-engine';
 import { TransactionGraph3D } from './TransactionGraph3D';
 
 interface InvestigationScreenProps {

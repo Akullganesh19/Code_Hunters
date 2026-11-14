@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { ArrowRight, Check, Database, Upload, X } from 'lucide-react';
-import type { Alert, TransactionEdge } from '../engine/schema';
-import type { SearchResultItem } from '../engine/search';
+import type { Alert, TransactionEdge, SearchResultItem } from '@tracelayer/aml-engine';
 import { TransactionGraph3D } from './TransactionGraph3D';
 
 interface OverviewScreenProps {

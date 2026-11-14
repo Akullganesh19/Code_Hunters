@@ -4,8 +4,8 @@ import {
   injectAdversarialMotif,
   runDetectionPipeline,
   type AdversarialMotifConfig,
-} from '../engine/pipeline';
-import type { TransactionEdge } from '../engine/schema';
+} from '@tracelayer/aml-engine';
+import type { TransactionEdge } from '@tracelayer/aml-engine';
 import { TransactionGraph3D } from './TransactionGraph3D';
 
 interface AdversarialLabScreenProps {

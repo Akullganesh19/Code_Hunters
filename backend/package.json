@@ -1,0 +1,14 @@
+{
+  "name": "@tracelayer/backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@tracelayer/aml-engine": "1.0.0"
+  },
+  "scripts": {
+    "dev": "node --import tsx src/server.ts",
+    "start": "node --import tsx src/server.ts",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  }
+}

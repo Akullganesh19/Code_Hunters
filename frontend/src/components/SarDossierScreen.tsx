@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Check, Copy, Download, ShieldCheck } from 'lucide-react';
-import { buildSarCaseDossier, formatDossierMarkdown } from '../engine/dossier';
-import type { Alert, TransactionEdge } from '../engine/schema';
+import { buildSarCaseDossier, formatDossierMarkdown } from '@tracelayer/aml-engine';
+import type { Alert, TransactionEdge } from '@tracelayer/aml-engine';
 
 interface SarDossierScreenProps {
   edges: TransactionEdge[];

@@ -10,7 +10,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@': projectRoot,
+      '@': path.resolve(projectRoot, 'src'),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': 'http://127.0.0.1:3001',
     },
   },
 });

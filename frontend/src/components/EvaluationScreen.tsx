@@ -5,12 +5,12 @@ import {
   evaluateTemporalSplit,
   runCounterexampleSuite,
   type EvaluationReport,
-} from '../engine/evaluation';
+} from '@tracelayer/aml-engine';
 import {
   BENCHMARK_SOURCE_LABEL,
   generateIbmAmlBenchmark,
   parseCsvTransactions,
-} from '../engine/fixtures';
+} from '@tracelayer/aml-engine';
 
 export function EvaluationScreen() {
   const [splitRatio, setSplitRatio] = useState<number>(0.7);

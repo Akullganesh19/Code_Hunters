@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, Bell, Search, User, X } from 'lucide-react';
-import type { Alert, TransactionEdge } from '../engine/schema';
+import type { Alert, TransactionEdge } from '@tracelayer/aml-engine';
 import {
   isMacPlatform,
   isSearchShortcutEvent,
   searchDataset,
   type SearchResultItem,
-} from '../engine/search';
+} from '@tracelayer/aml-engine';
 
 interface SidebarSearchProps {
   edges: TransactionEdge[];

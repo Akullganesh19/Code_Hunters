@@ -5,10 +5,10 @@ import {
   detectChronologicalCycles,
   detectFanInFanOut,
   detectRapidPassthrough,
-} from './detectors';
-import { buildSarCaseDossier, formatDossierMarkdown, sha256Hex } from './dossier';
-import { evaluateTemporalSplit, runCounterexampleSuite } from './evaluation';
-import { generateIbmAmlBenchmark, getDemoTransactions, parseCsvTransactions } from './fixtures';
+} from '../src/detectors';
+import { buildSarCaseDossier, formatDossierMarkdown, sha256Hex } from '../src/dossier';
+import { evaluateTemporalSplit, runCounterexampleSuite } from '../src/evaluation';
+import { generateIbmAmlBenchmark, getDemoTransactions, parseCsvTransactions } from '../src/fixtures';
 import {
   CLOSING_DISCLAIMER,
   ENTERPRISE_SCREENS,
@@ -16,10 +16,10 @@ import {
   injectAdversarialMotif,
   runDetectionPipeline,
   shouldMergeAlerts,
-} from './pipeline';
-import { buildTransactionGraph, ValidationError, validateTransactions } from './schema';
-import { computePriorityScore } from './scoring';
-import { isMacPlatform, isSearchShortcutEvent, searchDataset } from './search';
+} from '../src/pipeline';
+import { buildTransactionGraph, ValidationError, validateTransactions } from '../src/schema';
+import { computePriorityScore } from '../src/scoring';
+import { isMacPlatform, isSearchShortcutEvent, searchDataset } from '../src/search';
 
 test('UI specification expects exactly 5 Enterprise AML Command Center screens', () => {
   assert.equal(ENTERPRISE_SCREENS.length, 5);

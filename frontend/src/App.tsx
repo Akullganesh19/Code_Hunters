@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Activity,
   BarChart3,
@@ -19,14 +19,13 @@ import {
   DEMO_SOURCE_LABEL,
   getDemoTransactions,
   parseCsvTransactions,
-} from './engine/fixtures';
+} from '@tracelayer/aml-engine';
 import {
   ENTERPRISE_SCREENS,
-  runDetectionPipeline,
   type ScreenId,
-} from './engine/pipeline';
-import type { TransactionEdge } from './engine/schema';
-import type { SearchResultItem } from './engine/search';
+} from '@tracelayer/aml-engine';
+import type { TransactionEdge, SearchResultItem } from '@tracelayer/aml-engine';
+import { analyzeTransactions, type AnalysisResponse } from './services/api';
 
 const SCREEN_ICONS: Record<ScreenId, typeof Home> = {
   Overview: Home,
@@ -52,16 +51,37 @@ export default function App() {
   const [hMinutes, setHMinutes] = useState<number>(60);
   const [minRetention, setMinRetention] = useState<number>(0.8);
 
-  const pipelineResult = useMemo(
-    () =>
-      runDetectionPipeline(edges, {
-        K: kMin,
-        WHours: wHours,
-        HMinutes: hMinutes,
-        minRetention,
-      }),
-    [edges, kMin, wHours, hMinutes, minRetention]
-  );
+  const [pipelineResult, setPipelineResult] = useState<AnalysisResponse>({
+    edges: [],
+    alerts: [],
+    runtimeMs: 0,
+    edgesPerSec: 0,
+  });
+
+  useEffect(() => {
+    let active = true;
+    analyzeTransactions(edges, {
+      K: kMin,
+      WHours: wHours,
+      HMinutes: hMinutes,
+      minRetention,
+    })
+      .then((result) => {
+        if (active) {
+          setPipelineResult(result);
+          setValidationError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setValidationError(error instanceof Error ? error.message : 'Analysis service unavailable.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [edges, kMin, wHours, hMinutes, minRetention]);
 
   const handleLoadDemo = () => {
     setValidationError(null);
