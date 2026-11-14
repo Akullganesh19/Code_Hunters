@@ -94,11 +94,19 @@ export function AgentPanel({edges, sourceLabel, hasGroundTruthLabels, activeScre
       const idempotencyKey = workflowIdempotencyKey.current ?? globalThis.crypto.randomUUID();
       workflowIdempotencyKey.current = idempotencyKey;
       let currentRun = await startFiveScreenReview(edges, sourceLabel, idempotencyKey);
+      let recoveryRetries = 0;
       setRun(currentRun);
       setRecentRuns((current) => [currentRun, ...current.filter((item) => item.id !== currentRun.id)].slice(0, 8));
-      while (currentRun.status === 'queued' || currentRun.status === 'running') {
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
-        currentRun = await getAgentRun(currentRun.id);
+      while (true) {
+        if (currentRun.status === 'failed' && currentRun.error === 'The agent service restarted before this workflow finished.' && recoveryRetries < 1) {
+          recoveryRetries += 1;
+          currentRun = await startFiveScreenReview(edges, sourceLabel, idempotencyKey);
+        } else if (currentRun.status === 'queued' || currentRun.status === 'running') {
+          await new Promise((resolve) => window.setTimeout(resolve, 400));
+          currentRun = await getAgentRun(currentRun.id);
+        } else {
+          break;
+        }
         setRun(currentRun);
       }
       workflowIdempotencyKey.current = null;

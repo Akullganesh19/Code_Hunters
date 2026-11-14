@@ -4,7 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import type {AgentRun, AgentRunEvent} from '../src/contracts';
+import {CapabilityRegistry} from '../src/capability-registry';
 import {SqliteAgentRunStore} from '../src/sqlite-run-store';
+import {AgentWorkflowRunner} from '../src/workflow-runner';
 
 test('SQLite run history survives restart without persisting transaction contents', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'tracelayer-agent-store-'));
@@ -106,6 +108,61 @@ test('SQLite store marks interrupted workflows failed after a service restart', 
     const events = await recoveredStore.events(run.id);
     assert.equal(events.at(-1)?.type, 'run_failed');
     assert.equal(events.at(-1)?.detail, 'The agent service restarted before this workflow finished.');
+    await recoveredStore.close();
+  } finally {
+    await rm(directory, {recursive: true, force: true});
+  }
+});
+
+test('a client retry restarts an interrupted workflow without storing its input', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tracelayer-agent-client-recovery-'));
+  const databasePath = path.join(directory, 'runs.sqlite');
+  const run: AgentRun = {
+    id: 'run-client-recovery',
+    workflowId: 'recoverable',
+    status: 'queued',
+    startedBy: 'test-analyst',
+    createdAt: '2026-11-15T00:00:00.000Z',
+    updatedAt: '2026-11-15T00:00:00.000Z',
+    completedSteps: [],
+    outputs: {},
+  };
+  const idempotency = {key: 'recovery-retry-key', fingerprint: 'same-request'};
+
+  try {
+    const originalStore = await SqliteAgentRunStore.open(databasePath);
+    await originalStore.create(run, idempotency);
+    await originalStore.close();
+
+    const recoveredStore = await SqliteAgentRunStore.open(databasePath);
+    const registry = new CapabilityRegistry();
+    let executionCount = 0;
+    registry.register({
+      descriptor: {id: 'recover.once', contractVersion: 1, screen: 'overview', permission: 'read', description: 'Recovery test.'},
+      execute: (input) => { executionCount += 1; return input; },
+    });
+    const runner = new AgentWorkflowRunner(registry, recoveredStore);
+    runner.registerWorkflow({
+      id: 'recoverable', name: 'Recoverable workflow', description: 'Restart using a client retry.',
+      steps: [{id: 'result', capabilityId: 'recover.once', resolveInput: (context) => context.initialInput}],
+    });
+
+    const retry = await runner.enqueue('recoverable', {private: 'transaction-payload'}, 'test-analyst', idempotency);
+    assert.equal(retry.id, run.id);
+    assert.equal(retry.status, 'queued');
+    let events: AgentRunEvent[] = [];
+    for (let attempt = 0; attempt < 100; attempt++) {
+      events = await runner.getRunEvents(run.id);
+      if ((await runner.getRun(run.id))?.status === 'completed' && events.some(({type}) => type === 'run_completed')) break;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const completed = await runner.getRun(run.id);
+    assert.equal(completed?.status, 'completed');
+    assert.equal(executionCount, 1);
+    assert.deepEqual(events.filter(({type}) => type === 'run_started').map(({detail}) => detail), [
+      'Restarted after service recovery from the client retry.',
+    ]);
+    assert.equal((await readFile(databasePath, 'utf8')).includes('transaction-payload'), false);
     await recoveredStore.close();
   } finally {
     await rm(directory, {recursive: true, force: true});

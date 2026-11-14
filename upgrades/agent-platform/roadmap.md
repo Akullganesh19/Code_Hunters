@@ -23,7 +23,7 @@ Configure the OpenAI-compatible provider with `AGENT_MODEL_BASE_URL`, `AGENT_MOD
 ## Phase 2 — reliable state
 
 - Propagate interactive chat cancellation from the browser disconnect through the HTTP handler to the model provider. Implemented for chat requests.
-- Add a durable restartable queue and bounded retries. Workflow cancellation and durable request-level idempotency are implemented; the current queue scheduler is in-memory, so queued/running runs are marked failed after restart rather than resumed.
+- Add a durable restartable queue and bounded retries. Workflow cancellation and durable request-level idempotency are implemented. A connected browser now retries an interrupted run once by resubmitting the same request and idempotency key; the service still does not retain encrypted job inputs or resume queued work on its own.
 - Add complete access-controlled audit events while keeping sensitive transaction contents out of routine run-history storage.
 - Add machine-readable input/output schemas for the versioned capabilities and audit tool calls without storing unnecessary transaction contents. Positive capability contract versions and registry/manifest parity are implemented.
 - Show progress, evidence, and pending analyst actions consistently in the frontend.

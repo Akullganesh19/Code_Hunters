@@ -58,7 +58,16 @@ export class AgentWorkflowRunner {
     idempotency?: {key: string; fingerprint: string},
   ): Promise<AgentRun> {
     const {run, created} = await this.createRun(workflowId, initialInput, startedBy, 'queued', idempotency);
-    if (!created) return run;
+    if (!created) {
+      if (run.status !== 'failed' || run.error !== 'The agent service restarted before this workflow finished.') return run;
+      run.status = 'queued';
+      run.completedSteps = [];
+      run.outputs = {};
+      delete run.error;
+      run.updatedAt = new Date().toISOString();
+      await this.store.update(run);
+      await this.record(run, {type: 'run_started', detail: 'Restarted after service recovery from the client retry.'});
+    }
     const controller = new AbortController();
     const execution = new Promise<void>((resolve, reject) => {
       setImmediate(() => {
