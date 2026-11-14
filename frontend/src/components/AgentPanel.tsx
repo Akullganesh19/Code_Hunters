@@ -46,7 +46,11 @@ function outputSummary(run: AgentRun, key: string): string {
   if (key === 'adversarial_lab') {
     return `${Number(value.graphCaughtCount ?? 0)} of ${Number(value.totalInjected ?? 0)} synthetic transactions detected`;
   }
-  if (key === 'sar_dossier') return 'Evidence linked · draft ready for analyst review';
+  if (key === 'sar_dossier') {
+    return value.draftReady === true
+      ? 'Evidence and digest checks passed · analyst review required'
+      : 'Dossier checks need attention before export';
+  }
   if (key === 'evaluation') return 'Benchmark completed with reproducible settings';
   return 'Finished';
 }

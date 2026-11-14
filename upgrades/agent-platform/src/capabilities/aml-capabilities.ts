@@ -14,6 +14,7 @@ import {
   type DetectionPipelineOptions,
   type RawTransactionInput,
   type TransactionEdge,
+  validateSarCaseDossier,
 } from '@tracelayer/aml-engine';
 import {CapabilityRegistry} from '../capability-registry';
 
@@ -359,18 +360,25 @@ export function createAmlCapabilityRegistry(): CapabilityRegistry {
       id: 'dossier.draft_case',
       screen: 'sar_dossier',
       permission: 'draft',
-      description: 'Create an evidence-linked SAR case draft for analyst review; never submit it externally.',
+      description: 'Create and validate an evidence-linked case draft before returning exportable Markdown; never submit it externally.',
     },
     execute(input) {
       const payload = objectInput(input);
       const alerts = payload.alerts;
       if (!Array.isArray(alerts)) throw new Error('Capability input must include an alerts array.');
+      const edges = validateTransactions(transactionsFrom(payload));
       const dossier = buildSarCaseDossier({
         selectedAlerts: alerts as Alert[],
-        allEdges: transactionsFrom(payload) as TransactionEdge[],
+        allEdges: edges,
         sourceLabel: String(payload.sourceLabel ?? 'uploaded dataset'),
       });
-      return {dossier, markdown: formatDossierMarkdown(dossier)};
+      const validation = validateSarCaseDossier(dossier, edges);
+      return {
+        dossier,
+        validation,
+        draftReady: validation.valid,
+        ...(validation.valid ? {markdown: formatDossierMarkdown(dossier)} : {}),
+      };
     },
   });
 

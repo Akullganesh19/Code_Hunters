@@ -111,6 +111,7 @@ export async function runAgentChat(input: AgentChatInput): Promise<{
       'Synthetic benchmark comparisons measure sensitivity across generated samples only. Never present them as validation of real-world or production performance.',
       'You may search, analyze, inspect, simulate, evaluate, and draft across TraceLayer. Disposition changes only create proposals and require the analyst to apply them in the UI. Do not claim that a proposed disposition was applied.',
       'A SAR dossier is a draft for analyst review. Never claim it was filed or submitted. Do not make legal conclusions or recommend restrictions based only on an alert.',
+      'Before sharing dossier export text, inspect its validation result. Report failed checks and withhold export text when validation is not valid.',
       'When evidence is missing or a request is outside the available capabilities, state the limitation and ask for the needed screen data.',
     ].join('\n'),
     stopWhen: stepCountIs(8),
@@ -208,7 +209,7 @@ export async function runAgentChat(input: AgentChatInput): Promise<{
         execute: async (config) => capabilities.execute('adversarial.run_scenario', withDataset({config, baselineThreshold: config.baselineThreshold}), capabilityContext),
       }),
       draftSarCase: tool({
-        description: 'Build a deterministic evidence-linked SAR case dossier draft from selected current alert IDs. It is never submitted externally.',
+        description: 'Build and validate a deterministic evidence-linked case draft for selected current alert IDs. Return export Markdown only if checks against the current dataset pass; never submit it externally.',
         inputSchema: z.object({alertIds: z.array(z.string().min(1).max(160)).min(1).max(20)}),
         execute: async ({alertIds}) => {
           const alerts = getAnalysis().alerts.filter((alert) => alertIds.includes(alert.alert_id));

@@ -36,7 +36,7 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The API runs at `http://127.0.0.1:3001`, the model-backed agent service at `http://127.0.0.1:3100`, and Vite proxies `/api` requests through the local services. The **Open agent** control provides chat, typed tools for the five screens, detector-setting what-ifs, synthetic benchmark seed comparisons, screen navigation, and a deterministic full-review workflow. The AML engine computes findings; disposition changes remain analyst-confirmed and SAR dossiers remain drafts.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The API runs at `http://127.0.0.1:3001`, the model-backed agent service at `http://127.0.0.1:3100`, and Vite proxies `/api` requests through the local services. The **Open agent** control provides chat, typed tools for the five screens, detector-setting what-ifs, synthetic benchmark seed comparisons, dossier validation before export, screen navigation, and a deterministic full-review workflow. The AML engine computes findings; disposition changes remain analyst-confirmed and SAR dossiers remain drafts.
 
 You can also run either process separately:
 

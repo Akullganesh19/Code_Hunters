@@ -6,7 +6,7 @@ import {
   detectFanInFanOut,
   detectRapidPassthrough,
 } from '../src/detectors';
-import { buildSarCaseDossier, formatDossierMarkdown, sha256Hex } from '../src/dossier';
+import { buildSarCaseDossier, formatDossierMarkdown, sha256Hex, validateSarCaseDossier } from '../src/dossier';
 import { evaluateTemporalSplit, runCounterexampleSuite } from '../src/evaluation';
 import { generateIbmAmlBenchmark, getDemoTransactions, hasGroundTruthLabelColumn, hasValidGroundTruthLabels, parseCsvTransactions } from '../src/fixtures';
 import {
@@ -283,6 +283,23 @@ test('SAR Case Dossier SHA-256 digest is deterministic and Markdown export conta
   assert.equal(d1.sha256Digest, d2.sha256Digest);
   assert.equal(d1.sha256Digest.length, 64);
   assert.equal(sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  const validation = validateSarCaseDossier(d1, demoEdges);
+  assert.equal(validation.valid, true);
+  assert.ok(validation.checks.every((check) => check.passed));
+
+  const changedTotal = {...d1, totalVolume: d1.totalVolume + 1};
+  const totalValidation = validateSarCaseDossier(changedTotal, demoEdges);
+  assert.equal(totalValidation.valid, false);
+  assert.equal(totalValidation.checks.find((check) => check.id === 'ledger_metrics')?.passed, false);
+  assert.equal(totalValidation.checks.find((check) => check.id === 'content_digest')?.passed, false);
+
+  const changedEvidence = {
+    ...d1,
+    evidenceLedger: d1.evidenceLedger.map((row, index) => index === 0 ? {...row, sender: 'TAMPERED_ACCOUNT'} : row),
+  };
+  const evidenceValidation = validateSarCaseDossier(changedEvidence, demoEdges);
+  assert.equal(evidenceValidation.valid, false);
+  assert.equal(evidenceValidation.checks.find((check) => check.id === 'source_transactions')?.passed, false);
 
   const md = formatDossierMarkdown(d1);
   assert.ok(md.includes(d1.sha256Digest));
@@ -290,6 +307,10 @@ test('SAR Case Dossier SHA-256 digest is deterministic and Markdown export conta
   assert.ok(md.includes('Internal case dossier draft for analyst review. This is not a regulatory filing.'));
   assert.ok(!md.includes('Finnet 2.0'));
   assert.ok(!md.includes('FinCEN BSA'));
+
+  const unsafeMarkdown = formatDossierMarkdown({...d1, sourceLabel: 'source.csv\n## injected heading'});
+  assert.ok(unsafeMarkdown.includes('Data Source:** source.csv \\#\\# injected heading'));
+  assert.ok(!unsafeMarkdown.includes('source.csv\n## injected heading'));
 });
 
 test('Temporal split 3-tier evaluation and counterexample suite pass cleanly', () => {

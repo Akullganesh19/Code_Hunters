@@ -28,7 +28,7 @@ AGENT_MODEL_API_KEY=your-groq-key
 | Workspace | Navigate to any screen; open a verified alert directly in Investigation |
 | Investigation | Inspect alert graph evidence; look up transactions; summarize account activity; propose Confirmed/Dismissed dispositions |
 | Adversarial Lab | Run bounded synthetic scenarios against a sandbox copy of the current dataset |
-| SAR Case Dossier | Draft and return an evidence-linked dossier for analyst review |
+| SAR Case Dossier | Validate alert references, source transactions, ledger metrics, and digest before enabling export |
 | Evaluation | Evaluate eligible labelled data; run one synthetic benchmark; compare held-out metrics across two deterministic seeds to inspect seed sensitivity |
 
 The agent can also run the existing five-screen workflow and navigate to a selected screen or verified alert. It cannot read files outside TraceLayer or operate the host computer. Disposition proposals require an analyst click. SAR drafts are never filed. Account restrictions, external messages, and filing are not agent capabilities.

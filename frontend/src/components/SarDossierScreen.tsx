@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Check, Copy, Download, ShieldCheck } from 'lucide-react';
-import { buildSarCaseDossier, formatDossierMarkdown } from '@tracelayer/aml-engine';
+import { buildSarCaseDossier, formatDossierMarkdown, validateSarCaseDossier } from '@tracelayer/aml-engine';
 import type { Alert, TransactionEdge } from '@tracelayer/aml-engine';
 
 interface SarDossierScreenProps {
@@ -43,6 +43,10 @@ export function SarDossierScreen({
         sourceLabel,
       }),
     [selectedAlerts, edges, sourceLabel]
+  );
+  const validation = useMemo(
+    () => validateSarCaseDossier(dossier, edges),
+    [dossier, edges]
   );
 
   const toggleAlert = (alertId: string) => {
@@ -167,7 +171,7 @@ export function SarDossierScreen({
                       'application/json'
                     )
                   }
-                  disabled={selectedAlerts.length === 0}
+                  disabled={selectedAlerts.length === 0 || !validation.valid}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50 whitespace-nowrap"
                 >
                   <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -182,13 +186,26 @@ export function SarDossierScreen({
                       'text/markdown'
                     )
                   }
-                  disabled={selectedAlerts.length === 0}
+                  disabled={selectedAlerts.length === 0 || !validation.valid}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-medium text-[#f3f5f4] transition hover:bg-white/10 disabled:opacity-50 whitespace-nowrap"
                 >
                   <Download className="h-3.5 w-3.5" aria-hidden="true" />
                   Export Markdown
                 </button>
               </div>
+            </div>
+
+            <div
+              role={validation.valid ? 'status' : 'alert'}
+              className={`mt-4 rounded-lg border p-3 text-xs ${validation.valid ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-100' : 'border-rose-400/25 bg-rose-400/5 text-rose-100'}`}
+            >
+              <div className="font-semibold">
+                Dossier checks: {validation.checks.filter((check) => check.passed).length}/{validation.checks.length} passed
+              </div>
+              <p className="mt-1 text-[11px] leading-5">{validation.note}</p>
+              {validation.checks.filter((check) => !check.passed).map((check) => (
+                <p key={check.id} className="mt-1">{check.detail}</p>
+              ))}
             </div>
 
             {/* Deterministic SHA-256 Digest */}
@@ -207,6 +224,7 @@ export function SarDossierScreen({
               <button
                 type="button"
                 onClick={handleCopyDigest}
+                disabled={!validation.valid}
                 className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#f3f5f4] hover:bg-white/10 whitespace-nowrap"
               >
                 {copiedDigest ? (

@@ -26,6 +26,38 @@ export interface SarCaseDossier {
   alerts: Alert[];
 }
 
+export interface SarCaseDossierValidation {
+  valid: boolean;
+  checks: Array<{id: string; passed: boolean; detail: string}>;
+  note: string;
+}
+
+type DossierContent = Omit<SarCaseDossier, 'caseId' | 'sha256Digest'>;
+
+function canonicalDossierContent(dossier: DossierContent): string {
+  return JSON.stringify({
+    sourceLabel: dossier.sourceLabel,
+    alertIds: dossier.alertIds,
+    typologies: dossier.typologies,
+    accountsInvolved: dossier.accountsInvolved,
+    txCount: dossier.txCount,
+    totalVolume: dossier.totalVolume,
+    timeWindowStart: dossier.timeWindowStart,
+    timeWindowEnd: dossier.timeWindowEnd,
+    plainLanguageTrail: dossier.plainLanguageTrail,
+    evidenceLedger: dossier.evidenceLedger,
+    alerts: dossier.alerts,
+  });
+}
+
+function sameStrings(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /**
  * Pure TypeScript synchronous SHA-256 implementation so evidence digests are
  * 100% deterministic across browser and Node test environments.
@@ -160,20 +192,7 @@ export function buildSarCaseDossier(params: {
       ? `${trails.join(' ')} ${CLOSING_DISCLAIMER}`
       : `No alerts selected for SAR dossier assembly. ${CLOSING_DISCLAIMER}`;
 
-  // Canonical deterministic payload (excludes volatile wall-clock generation timestamps)
-  const canonicalForHash = JSON.stringify({
-    sourceLabel,
-    alertIds: sortedAlerts.map((a) => a.alert_id),
-    accountsInvolved: Array.from(accSet).sort(),
-    evidenceLedger,
-    plainLanguageTrail,
-  });
-
-  const sha256Digest = sha256Hex(canonicalForHash);
-  const caseId = `SAR-${sha256Digest.slice(0, 10).toUpperCase()}`;
-
-  return {
-    caseId,
+  const dossierContent: DossierContent = {
     sourceLabel,
     alertIds: sortedAlerts.map((a) => a.alert_id),
     typologies: Array.from(typSet).sort(),
@@ -184,27 +203,126 @@ export function buildSarCaseDossier(params: {
     timeWindowEnd,
     plainLanguageTrail,
     evidenceLedger,
-    sha256Digest,
     alerts: sortedAlerts,
+  };
+  const sha256Digest = sha256Hex(canonicalDossierContent(dossierContent));
+  const caseId = `SAR-${sha256Digest.slice(0, 10).toUpperCase()}`;
+
+  return {
+    ...dossierContent,
+    caseId,
+    sha256Digest,
+  };
+}
+
+/**
+ * Check dossier consistency against the active source ledger before export.
+ * A passing digest proves internal consistency only; it does not authenticate
+ * the source, analyst, or regulatory status of the document.
+ */
+export function validateSarCaseDossier(
+  dossier: SarCaseDossier,
+  sourceEdges: TransactionEdge[],
+): SarCaseDossierValidation {
+  const checks: SarCaseDossierValidation['checks'] = [];
+  const add = (id: string, passed: boolean, detail: string) => checks.push({id, passed, detail});
+
+  const alertIds = dossier.alerts.map((alert) => alert.alert_id);
+  const alertReferencesValid = alertIds.length > 0 &&
+    new Set(alertIds).size === alertIds.length &&
+    sameStrings(dossier.alertIds, alertIds);
+  add('alert_references', alertReferencesValid, alertReferencesValid
+    ? `${alertIds.length} selected alert references match the dossier.`
+    : 'Select at least one alert and ensure dossier alert IDs match the included alerts.');
+
+  const expectedTypologies = [...new Set(dossier.alerts.map((alert) => alert.typology))].sort();
+  const expectedAccounts = [...new Set(dossier.alerts.flatMap((alert) => alert.accounts))].sort();
+  const endpointAccounts = new Set(dossier.evidenceLedger.flatMap((row) => [row.sender, row.receiver]));
+  const metadataValid = sameStrings(dossier.typologies, expectedTypologies) &&
+    sameStrings(dossier.accountsInvolved, expectedAccounts) &&
+    [...endpointAccounts].every((account) => expectedAccounts.includes(account));
+  add('case_metadata', metadataValid, metadataValid
+    ? 'Typologies and involved accounts match the selected alerts.'
+    : 'Case typologies or involved accounts do not match the selected alerts.');
+
+  const referencedTransactionIds = new Set(dossier.alerts.flatMap((alert) => alert.tx_ids));
+  const ledgerTransactionIds = dossier.evidenceLedger.map((row) => row.tx_id);
+  const ledgerLinksValid = new Set(ledgerTransactionIds).size === ledgerTransactionIds.length &&
+    referencedTransactionIds.size === ledgerTransactionIds.length &&
+    ledgerTransactionIds.every((id) => referencedTransactionIds.has(id));
+  add('evidence_links', ledgerLinksValid, ledgerLinksValid
+    ? `${ledgerTransactionIds.length} evidence transactions match the selected alerts.`
+    : 'The evidence ledger has missing, duplicate, or unreferenced transaction IDs.');
+
+  const sourceById = new Map(sourceEdges.map((edge) => [edge.tx_id, edge]));
+  const sourceMatches = ledgerLinksValid && dossier.evidenceLedger.every((row) => {
+    const edge = sourceById.get(row.tx_id);
+    return Boolean(edge && edge.sender === row.sender && edge.receiver === row.receiver &&
+      edge.amount === row.amount && edge.timestamp === row.timestamp);
+  });
+  add('source_transactions', sourceMatches, sourceMatches
+    ? 'Evidence transaction parties, amounts, and timestamps match the active dataset.'
+    : 'One or more evidence rows do not match the active dataset.');
+
+  const chronological = dossier.evidenceLedger.every((row, index, rows) => {
+    const previous = rows[index - 1];
+    const edge = sourceById.get(row.tx_id);
+    const previousEdge = previous ? sourceById.get(previous.tx_id) : undefined;
+    if (!edge) return false;
+    if (row.hop !== `${index + 1}/${rows.length}`) return false;
+    if (!previous || !previousEdge) return row.delta_min === 0 && row.retention_pct === null;
+    const expectedDelta = round2((edge.tsMs - previousEdge.tsMs) / 60_000);
+    const expectedRetention = previousEdge.amount > 0
+      ? Math.round((edge.amount / previousEdge.amount) * 10_000) / 100
+      : null;
+    const ordered = edge.tsMs > previousEdge.tsMs ||
+      (edge.tsMs === previousEdge.tsMs && edge.tx_id.localeCompare(previousEdge.tx_id) >= 0);
+    return ordered && row.delta_min === expectedDelta && row.retention_pct === expectedRetention;
+  });
+  const expectedVolume = round2(dossier.evidenceLedger.reduce((sum, row) => sum + row.amount, 0));
+  const expectedStart = dossier.evidenceLedger[0]?.timestamp ?? '';
+  const expectedEnd = dossier.evidenceLedger[dossier.evidenceLedger.length - 1]?.timestamp ?? '';
+  const ledgerMetricsValid = chronological && dossier.txCount === dossier.evidenceLedger.length &&
+    dossier.totalVolume === expectedVolume && dossier.timeWindowStart === expectedStart && dossier.timeWindowEnd === expectedEnd;
+  add('ledger_metrics', ledgerMetricsValid, ledgerMetricsValid
+    ? 'Ledger order, hops, intervals, retention, totals, and time window agree.'
+    : 'Ledger order or derived totals do not match the evidence rows.');
+
+  const expectedDigest = sha256Hex(canonicalDossierContent(dossier));
+  const digestValid = dossier.sha256Digest === expectedDigest &&
+    dossier.caseId === `SAR-${expectedDigest.slice(0, 10).toUpperCase()}`;
+  add('content_digest', digestValid, digestValid
+    ? 'The case ID and SHA-256 digest match all dossier content.'
+    : 'The case ID or digest does not match the current dossier content.');
+
+  return {
+    valid: checks.every((check) => check.passed),
+    checks,
+    note: 'These checks confirm internal consistency with the active dataset. They do not authenticate the data source or make this a regulatory filing.',
   };
 }
 
 export function formatDossierMarkdown(dossier: SarCaseDossier): string {
+  const text = (value: string) => value.replace(/[\\`*_{}\[\]()#+>\r\n]/g, (character) => {
+    if (character === '\r' || character === '\n') return ' ';
+    return `\\${character}`;
+  });
+  const cell = (value: string) => text(value).replace(/\|/g, '\\|');
   const lines: string[] = [
-    `# Suspicious Activity Report Dossier — ${dossier.caseId}`,
+    `# Suspicious Activity Report Dossier — ${text(dossier.caseId)}`,
     '',
     'Internal case dossier draft for analyst review. This is not a regulatory filing.',
-    `- **Data Source:** ${dossier.sourceLabel}`,
-    `- **Included Alerts:** ${dossier.alertIds.join(', ') || 'None'}`,
-    `- **Typologies:** ${dossier.typologies.join(', ') || 'None'}`,
-    `- **Accounts Involved (${dossier.accountsInvolved.length}):** ${dossier.accountsInvolved.join(', ') || 'None'}`,
+    `- **Data Source:** ${text(dossier.sourceLabel)}`,
+    `- **Included Alerts:** ${dossier.alertIds.map(text).join(', ') || 'None'}`,
+    `- **Typologies:** ${dossier.typologies.map(text).join(', ') || 'None'}`,
+    `- **Accounts Involved (${dossier.accountsInvolved.length}):** ${dossier.accountsInvolved.map(text).join(', ') || 'None'}`,
     `- **Total Volume:** $${dossier.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     `- **Time Window:** ${dossier.timeWindowStart || 'N/A'} -> ${dossier.timeWindowEnd || 'N/A'}`,
-    `- **SHA-256 Evidence Digest:** \`${dossier.sha256Digest}\``,
+    `- **SHA-256 Evidence Digest:** \`${text(dossier.sha256Digest)}\``,
     '',
     '## Fact-Backed Plain-Language Trail',
     '',
-    dossier.plainLanguageTrail,
+    text(dossier.plainLanguageTrail),
     '',
     '## Chronological Evidence Transaction Ledger',
     '',
@@ -214,7 +332,7 @@ export function formatDossierMarkdown(dossier: SarCaseDossier): string {
 
   for (const row of dossier.evidenceLedger) {
     lines.push(
-      `| ${row.hop} | ${row.tx_id} | ${row.sender} | ${row.receiver} | $${row.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | ${row.timestamp} | ${row.delta_min.toFixed(1)} | ${row.retention_pct !== null ? row.retention_pct.toFixed(1) + '%' : '—'} |`
+      `| ${cell(row.hop)} | ${cell(row.tx_id)} | ${cell(row.sender)} | ${cell(row.receiver)} | $${row.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | ${cell(row.timestamp)} | ${row.delta_min.toFixed(1)} | ${row.retention_pct !== null ? row.retention_pct.toFixed(1) + '%' : '—'} |`
     );
   }
 

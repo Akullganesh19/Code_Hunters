@@ -29,7 +29,7 @@
       "id": "dossier.draft_case",
       "screen": "sar_dossier",
       "permission": "draft",
-      "description": "Prepare a case draft from selected alerts and produce an evidence ledger for analyst review."
+      "description": "Prepare a case draft, validate evidence links and digest against the active dataset, and return Markdown only when checks pass."
     },
     {
       "id": "evaluation.compare_benchmarks",
