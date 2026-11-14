@@ -22,7 +22,7 @@ class GemmaDatasetTests(unittest.TestCase):
             destination = Path(temp_dir) / "train.jsonl"
             count = prepare(data_dir / "train.jsonl", destination, capabilities)
             rows = [json.loads(line) for line in destination.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(count, 66)
+        self.assertGreaterEqual(count, 150)
         seen = {tool for row in rows for tool in row["expected_tools"]}
         self.assertEqual(seen, {capability["id"] for capability in capabilities})
 

@@ -14,7 +14,7 @@ CALL_PATTERN = re.compile(r"<\|tool_call\>call:([a-z0-9_.-]+)\{")
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--prepared-eval", type=Path, required=True)
-    parser.add_argument("--adapter", type=Path, required=True)
+    parser.add_argument("--adapter", type=Path, help="Optional trained adapter; omit to measure the untuned base preset.")
     parser.add_argument("--preset", default="gemma4_instruct_2b")
     parser.add_argument("--sequence-length", type=int, default=1024)
     parser.add_argument("--rank", type=int, default=8)
@@ -30,8 +30,9 @@ def main() -> None:
     model_class = causal_lm_class(keras_hub, args.preset)
     model = model_class.from_preset(args.preset, dtype=args.dtype)
     model.preprocessor.sequence_length = args.sequence_length
-    model.backbone.enable_lora(rank=args.rank)
-    model.backbone.load_lora_weights(str(args.adapter))
+    if args.adapter:
+        model.backbone.enable_lora(rank=args.rank)
+        model.backbone.load_lora_weights(str(args.adapter))
     model.compile(sampler=keras_hub.samplers.GreedySampler())
 
     total = 0

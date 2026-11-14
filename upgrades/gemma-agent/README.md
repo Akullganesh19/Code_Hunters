@@ -12,6 +12,7 @@ The starter uses Google's `gemma4_instruct_2b` preset with LoRA rank 8. Gemma 4 
 - A Kaggle/Colab training script using KerasHub and LoRA.
 - Held-out tool-routing evaluation and exact-match checks.
 - A loopback inference server and an agent-platform endpoint that validates generated actions against the capability registry and permission policy before execution.
+- A separate agent console at `http://127.0.0.1:3100/` with synthetic data loading, a model-task button, a deterministic workflow button, and run output.
 
 The checked-in examples contain no customer transactions. Do not train on real account data. The existing AML transaction corpus can evaluate or train the separate deterministic risk model, but it is not language-model instruction data.
 
@@ -37,6 +38,8 @@ The model can select only registered non-write capabilities. Dataset-dependent s
 
 Gemma access is gated. Accept the Gemma model terms through your Kaggle account, then add `KAGGLE_USERNAME` and `KAGGLE_KEY` as notebook secrets. Use a GPU-enabled Kaggle notebook or Colab runtime. First format and validate the seed data, then train:
 
+For Colab, open the [fine-tuning notebook](https://colab.research.google.com/github/Akullganesh19/Code_Hunters/blob/main/upgrades/gemma-agent/colab_finetune.ipynb), select a GPU runtime, add the two Kaggle secrets, and run the cells from the top. It evaluates the untuned base, trains the adapter, evaluates the adapter on the same held-out examples, and downloads a ZIP containing only the adapter and training metrics. The manual commands below are available for Kaggle notebooks or custom runtimes.
+
 In Colab, expose the Kaggle secrets before launching the training script:
 
 ```python
@@ -57,14 +60,24 @@ python upgrades/gemma-agent/src/train.py \
   --output /content/tracelayer-gemma-lora
 ```
 
+Compare the untuned base and tuned adapter on the same held-out tasks:
+
+```sh
+python upgrades/gemma-agent/src/evaluate.py \
+  --prepared-eval /content/tracelayer-prepared/eval.jsonl
+python upgrades/gemma-agent/src/evaluate.py \
+  --prepared-eval /content/tracelayer-prepared/eval.jsonl \
+  --adapter /content/tracelayer-gemma-lora/adapter.weights.h5
+```
+
 The default preset is the 2B effective-parameter Gemma 4 instruction model, with sequence length 1024 and batch size 1. Use a GPU runtime with at least 24 GB memory for this preset. If only a T4 is available, try `--preset gemma3_instruct_1b --sequence-length 512 --dtype float16`; Google's Gemma 3 LoRA walkthrough uses a T4. KerasHub needs Python 3.11 or newer and a GPU-compatible backend in the hosted runtime. The requirements file installs Keras/KerasHub; don't replace the runtime's GPU-enabled JAX packages with CPU-only ones.
 
 ## Data format
 
-Each source JSONL row has a user request and one or more expected tool calls; some multi-step rows include synthetic tool responses and a final answer. `prepare_data.py` serializes them using Gemma 4's documented native tool-call markers. To add a screen, update `upgrades/agent-platform/capabilities.json` and add examples for its new capability; the runtime must still enforce authorization independently of model output.
+Each source JSONL row has a user request and one or more expected tool calls. Multi-step rows teach ordered tool selection; refusal examples have no tool call. `prepare_data.py` serializes them using Gemma 4's documented native tool-call markers. To add a screen, update `upgrades/agent-platform/capabilities.json` and add examples for its new capability; the runtime must still enforce authorization independently of model output.
 
 ## Current status and limitations
 
-This repository contains the training pipeline and seed examples, not trained weights. The Mac development environment is not the hosted GPU runtime needed to load and tune this checkpoint. Model weights and Kaggle credentials must not be committed. The seed set is only a smoke-start; it is too small to claim a production-quality agent. Add reviewed, diverse tasks and run held-out evaluation before connecting the adapter to a live workflow.
+This repository contains the training pipeline and 171 synthetic training examples plus 24 held-out examples, not trained weights. The Mac development environment is not the hosted GPU runtime needed to load and tune this checkpoint. Model weights and Kaggle credentials must not be committed. This seed set starts the first experiment; review results and add real, approved task examples before claiming production quality.
 
 Fine-tuning teaches the model TraceLayer terminology and tool selection; it does not make the model a reliable AML detector. The AML engine remains the source of findings. The agent proposes tool calls, and the server validates every call, limits execution, logs it, and requires review for drafts or other consequential actions.

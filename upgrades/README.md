@@ -8,6 +8,7 @@ This folder is a separate workspace for the next version of TraceLayer. The curr
 - `agent-platform/capabilities.json` — initial capability catalog covering the current five screens.
 - `agent-platform/roadmap.md` — phased implementation and acceptance criteria.
 - `agent-platform/src/` — isolated capability registry, workflow runner, AML adapters, and local HTTP API.
+- `agent-platform/console/` — standalone agent console for the upgrade service.
 - `agent-platform/tests/` — focused tests for five-screen execution and review gating.
 - `gemma-agent/` — Gemma 4 LoRA training data, hosted-GPU fine-tuning pipeline, evaluation, and local inference bridge.
 

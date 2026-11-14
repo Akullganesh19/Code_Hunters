@@ -38,8 +38,8 @@ function promptFor(task: string, capabilities: CapabilityDescriptor[]): string {
   ).join('');
   return [
     '<|turn>system\n',
-    'You are the TraceLayer AML analyst agent. Select only the smallest set of tools needed. ',
-    'Never invent results, alert IDs, or evidence. Analyze a dataset before investigating or drafting. ',
+    'You are the TraceLayer AML analyst agent. Select only the smallest set of tools needed and return multiple tools in order when the user requests multiple steps. ',
+    'Never invent results, alert IDs, or evidence. For investigation or dossier tasks, select the requested tool; the execution layer adds prerequisite analysis when needed. ',
     'A SAR action creates a draft only and always needs an analyst review; never claim a report was filed. ',
     'Evaluation uses the synthetic benchmark unless the user asks otherwise. For requests outside these tools, ',
     'explain the limitation and do not call a tool. Tool call arguments must be valid JSON fields; use {} when no arguments are needed.\n',
