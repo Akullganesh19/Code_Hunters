@@ -1,15 +1,24 @@
 # Deploy TraceLayer
 
-The Vercel production frontend is live at `https://tracelayer-eight.vercel.app`. Its Production settings already point to `https://tracelayer-api.onrender.com` and `https://tracelayer-agent.onrender.com`. The proxy adds the private service token at the edge, so it is not sent to the browser and large analysis requests do not pass through a serverless function body limit.
+The Vercel production frontend is live at `https://tracelayer-eight.vercel.app`. Its Production settings point to the live Render API and agent services. The proxy adds the private service token at the edge, so it is not sent to the browser and large analysis requests do not pass through a serverless function body limit.
+
+## Current live preview
+
+- Frontend: `https://tracelayer-eight.vercel.app`
+- API: `https://tracelayer-api-bi7q.onrender.com`
+- Agent: `https://tracelayer-agent.onrender.com`
+- Both Render services currently run on the Free plan. Health checks and agent capabilities have been verified through the public Vercel URL.
+- Groq chat is not configured yet. Add a newly generated Groq API key to `AGENT_MODEL_API_KEY` on the Render agent service to enable model responses. Rotate the key previously shared in chat before using it for a public deployment.
+- The free Render agent has no persistent disk, so run history and redacted audit metadata can be lost when its instance restarts. Free services can also sleep while idle.
 
 ## 1. Create the Render services
 
-Create a Render Blueprint from this repository's `render.yaml`. It defines two always-on Starter web services and a 1 GB persistent disk for redacted agent run and audit metadata. During initial Blueprint creation, Render asks for:
+For the durable, always-on setup, create a Render Blueprint from this repository's `render.yaml`. It defines two paid Starter web services and a 1 GB persistent disk for redacted agent run and audit metadata. During initial Blueprint creation, Render asks for:
 
 - `CORS_ORIGIN` on each service: enter `https://tracelayer-eight.vercel.app` (no trailing slash).
 - `AGENT_MODEL_API_KEY`: enter a newly generated Groq API key. Do not commit it or paste it into source files.
 
-Render generates `TRACELAYER_INTERNAL_TOKEN` in a shared environment group for both services. After creation, replace that value with the matching token already stored in Vercel's Production environment (the token has been copied to the local clipboard for setup). Wait for both health checks to pass. Confirm the service URLs are `https://tracelayer-api.onrender.com` and `https://tracelayer-agent.onrender.com`; if Render assigns different URLs, update `RENDER_API_URL` and `RENDER_AGENT_URL` in the Vercel project and redeploy.
+The current Vercel Production project has the internal service token in its encrypted environment settings. For a new paid Render deployment, set the same token on both services and confirm their actual service URLs. If the URLs change, update `RENDER_API_URL` and `RENDER_AGENT_URL` in the Vercel project and redeploy.
 
 ## 2. Vercel environment setup (already done)
 
