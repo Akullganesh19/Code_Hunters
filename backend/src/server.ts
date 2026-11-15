@@ -11,6 +11,7 @@ import {
 } from '../../shared/httpSecurity';
 
 const port = Number(process.env.PORT ?? 3001);
+const host = process.env.HOST ?? '127.0.0.1';
 const maxBodyBytes = 25 * 1024 * 1024;
 const maxConcurrentAnalyses = 2;
 const analysisTimeoutMs = 30_000;
@@ -183,6 +184,6 @@ const server = createServer(async (request, response) => {
 });
 
 configureHttpTimeouts(server);
-server.listen(port, '127.0.0.1', () => {
-  console.log(`TraceLayer API listening on http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  console.log(`TraceLayer API listening on http://${host}:${port}`);
 });

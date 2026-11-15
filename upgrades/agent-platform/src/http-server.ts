@@ -20,7 +20,8 @@ import {
   requireInternalToken,
 } from '../../../shared/httpSecurity';
 
-const port = Number(process.env.AGENT_PORT ?? 3100);
+const port = Number(process.env.AGENT_PORT ?? process.env.PORT ?? 3100);
+const host = process.env.HOST ?? '127.0.0.1';
 const maxBodyBytes = 25 * 1024 * 1024;
 const maxConcurrentAgentRequests = 2;
 const internalToken = getInternalToken();
@@ -289,8 +290,8 @@ async function startServer(): Promise<void> {
   runStore = await SqliteAgentRunStore.open(databasePath, retentionLimit);
   runner = new AgentWorkflowRunner(registry, runStore);
   runner.registerWorkflow(fiveScreenReviewWorkflow);
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`TraceLayer agent upgrade listening on http://127.0.0.1:${port}`);
+  server.listen(port, host, () => {
+    console.log(`TraceLayer agent upgrade listening on http://${host}:${port}`);
   });
 }
 

@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@vercel/config": "^0.14.1",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
   },
