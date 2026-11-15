@@ -2,7 +2,7 @@ services:
   - type: web
     name: tracelayer-api
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci
     startCommand: npm run start --workspace @tracelayer/backend
     healthCheckPath: /api/health
@@ -18,21 +18,17 @@ services:
   - type: web
     name: tracelayer-agent
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci
     startCommand: npm run start --workspace tracelayer-agent-platform-upgrade
     healthCheckPath: /api/agent/health
-    disk:
-      name: agent-metadata
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: HOST
         value: 0.0.0.0
       - key: AGENT_RUNS_DB_PATH
-        value: /var/data/agent-runs.sqlite
+        value: /tmp/agent-runs.sqlite
       - key: AGENT_MODEL_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: AGENT_MODEL
